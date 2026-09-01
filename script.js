@@ -1,12 +1,14 @@
 /**
  * THE VAULT: ESCAPE ROOM INTERACTIVO (8 SECTORES)
- * Motor de Juego: Exploración Libre, Avisos HUD Flotantes (Toasts sobre Modales) y Pistas Desacopladas
+ * Motor de Juego: Inventario Infinito con Desplazamiento Horizontal (Scroll Táctil),
+ * Inventario Inteligente (Inspección/Lectura y Combinación), Toast Singleton Antispam,
+ * Puzles 100% Solubles y Navegación Libre.
  */
 
 // ==========================================
 // 1. CONSTANTES, AUDIO Y ESTADO GLOBAL
 // ==========================================
-const SAVE_KEY = 'THE_VAULT_SAVE_DATA_V5';
+const SAVE_KEY = 'THE_VAULT_SAVE_DATA_V10';
 
 // Sistema de Audio Sintetizado (Web Audio API)
 class SoundFX {
@@ -103,7 +105,7 @@ const ITEMS = {
     'partitura_digital': { 
         name: 'Partitura Digital', 
         icon: '📜', 
-        desc: 'Registro de frecuencias armónicas: DO - MI - SOL - LA - SI.' 
+        desc: 'Registro de frecuencias armónicas: [ DO - MI - SOL - LA - SI ].' 
     },
     'llave_valvula': { 
         name: 'Llave de Válvula', 
@@ -159,18 +161,15 @@ const PUZZLE_SOLUTIONS = {
     safeCode: '8492',
     synthSequence: ['DO', 'MI', 'SOL', 'LA', 'SI'],
     pipesValidRotations: {
-        1: [0, 2], // horizontal
-        2: [0],    // ┗
-        3: [1],    // ┏
-        5: [0, 2], // horizontal
-        6: [2],    // ┓
-        7: [3]     // ┛
+        1: [0, 2], // horizontal ━
+        2: [2],    // ┓ (conecta izquierda con abajo)
+        5: [1, 3]  // vertical ┃ (conecta arriba con salida)
     },
     codebreakerSequence: ['🔴', '🟡', '🔵', '🟣'],
     masterCode: '7492618'
 };
 
-// Estado del Juego
+// Estado Reactivo del Juego
 let gameState = {
     currentRoom: 1,
     inventory: [],
@@ -210,7 +209,7 @@ let pendingInspectItem = null;
 let gameTimerInterval = null;
 
 // ==========================================
-// 2. INICIALIZACIÓN Y LISTENERS
+// 2. INICIALIZACIÓN Y EVENT LISTENERS
 // ==========================================
 document.addEventListener('DOMContentLoaded', () => {
     checkSavedGame();
@@ -301,7 +300,7 @@ function setupEventListeners() {
         saveBtn.addEventListener('click', () => {
             sfx.click();
             saveGameState();
-            showDialogue('💾 Partida guardada correctamente.');
+            showDialogue('💾 Partida guardada.');
         });
     }
 
@@ -315,7 +314,7 @@ function setupEventListeners() {
         });
     }
 
-    // Navegación libre por flechas (todas las salas 1-8 desbloqueadas)
+    // Navegación libre por flechas (todas las salas 1-8 desbloqueadas de inicio)
     document.querySelectorAll('.nav-arrow').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const target = parseInt(e.currentTarget.dataset.targetRoom, 10);
@@ -479,14 +478,14 @@ function updateMapUI() {
 }
 
 // ==========================================
-// 3. SISTEMA DE DIÁLOGO Y TOASTS SOBRE MODALES
+// 3. SISTEMA TOAST SINGLETON (ESTRICTO ANTISPAM)
 // ==========================================
+let activeToastTimeout = null;
+let currentToastMsg = '';
+
 function showDialogue(text) {
-    // 1. Actualizar barra inferior fija
     const el = document.getElementById('dialogue-text');
     if (el) el.textContent = text;
-
-    // 2. Mostrar Toast flotante sobre cualquier modal activa
     showToastNotification(text);
 }
 
@@ -497,23 +496,33 @@ function showToastNotification(text) {
         container.id = 'vault-toast-container';
         container.style.cssText = `
             position: fixed;
-            top: 22px;
+            top: 14px;
             left: 50%;
             transform: translateX(-50%);
-            z-index: 99999;
-            width: 92%;
-            max-width: 420px;
+            z-index: 999999;
+            width: 90%;
+            max-width: 390px;
             pointer-events: none;
             display: flex;
-            flex-direction: column;
-            gap: 8px;
-            align-items: center;
+            justify-content: center;
         `;
         document.body.appendChild(container);
     }
 
+    if (currentToastMsg === text && container.children.length > 0) {
+        return;
+    }
+
+    container.innerHTML = '';
+    if (activeToastTimeout) {
+        clearTimeout(activeToastTimeout);
+        activeToastTimeout = null;
+    }
+
+    currentToastMsg = text;
+
     const isError = text.includes('❌') || text.includes('⚠️');
-    const isSuccess = text.includes('🔓') || text.includes('⚡') || text.includes('✨') || text.includes('🎹') || text.includes('🌀') || text.includes('🛰️') || text.includes('❄️');
+    const isSuccess = text.includes('🔓') || text.includes('⚡') || text.includes('✨') || text.includes('🎹') || text.includes('🌀') || text.includes('🛰️') || text.includes('❄️') || text.includes('🏆');
 
     let borderColor = 'var(--neon-cyan, #00f3ff)';
     let shadowColor = 'rgba(0, 243, 255, 0.4)';
@@ -526,38 +535,42 @@ function showToastNotification(text) {
     }
 
     const toast = document.createElement('div');
-    toast.className = 'vault-toast-item';
+    toast.className = 'vault-toast-single';
     toast.style.cssText = `
-        background: rgba(6, 11, 18, 0.96);
+        background: rgba(6, 11, 18, 0.97);
         border: 1.5px solid ${borderColor};
         color: #ffffff;
-        padding: 11px 16px;
-        border-radius: 12px;
+        padding: 9px 15px;
+        border-radius: 10px;
         font-family: var(--font-ui, 'Rajdhani', sans-serif);
-        font-size: 13.5px;
+        font-size: 13px;
         font-weight: 700;
         text-align: center;
-        line-height: 1.35;
-        box-shadow: 0 0 25px ${shadowColor};
-        backdrop-filter: blur(12px);
-        transform: translateY(-20px) scale(0.95);
+        line-height: 1.3;
+        box-shadow: 0 4px 20px ${shadowColor};
+        backdrop-filter: blur(10px);
+        transform: translateY(-10px);
         opacity: 0;
-        transition: transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.25s ease;
-        pointer-events: auto;
+        transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.2s ease;
+        pointer-events: none;
+        width: 100%;
     `;
     toast.textContent = text;
     container.appendChild(toast);
 
     requestAnimationFrame(() => {
-        toast.style.transform = 'translateY(0) scale(1)';
+        toast.style.transform = 'translateY(0)';
         toast.style.opacity = '1';
     });
 
-    setTimeout(() => {
-        toast.style.transform = 'translateY(-15px) scale(0.95)';
+    activeToastTimeout = setTimeout(() => {
+        toast.style.transform = 'translateY(-10px)';
         toast.style.opacity = '0';
-        setTimeout(() => toast.remove(), 260);
-    }, 3200);
+        setTimeout(() => {
+            if (container.contains(toast)) toast.remove();
+            if (currentToastMsg === text) currentToastMsg = '';
+        }, 220);
+    }, 2400);
 }
 
 function openModal(modalId) {
@@ -738,14 +751,14 @@ function handleHotspot(action) {
 }
 
 // ==========================================
-// 5. INVENTARIO Y COMBINACIÓN
+// 5. INVENTARIO INFINITO Y DESLIZABLE (SWIPE / SCROLL)
 // ==========================================
+function isItemCombinable(itemId) {
+    return RECIPES.some(r => r.ingredients.includes(itemId));
+}
+
 function addItemToInventory(itemId) {
-    if (gameState.inventory.length >= 8) {
-        sfx.error();
-        showDialogue('⚠️ Tu inventario táctico está lleno (máximo 8 objetos).');
-        return false;
-    }
+    // Sin límite de capacidad (inventario infinito y deslizable)
     if (!gameState.inventory.includes(itemId)) {
         gameState.inventory.push(itemId);
         if (!gameState.collectedHotspots.includes(itemId)) {
@@ -771,29 +784,73 @@ function removeItemFromInventory(itemId) {
 }
 
 function updateInventoryUI() {
-    const slots = document.querySelectorAll('#inventory-slots .slot-item');
-    const countEl = document.getElementById('inv-count');
-    if (countEl) countEl.textContent = gameState.inventory.length;
+    const container = document.getElementById('inventory-slots');
+    const topLabel = document.querySelector('.inventory-top span');
+    
+    // Actualizar cabecera del inventario (mostrando cantidad total dinámica)
+    if (topLabel) {
+        topLabel.innerHTML = `Inventario táctico (<span id="inv-count">${gameState.inventory.length}</span>)`;
+    }
 
-    slots.forEach((slot, idx) => {
-        slot.className = 'slot-item';
-        slot.innerHTML = '';
-        slot.onclick = null;
+    if (!container) return;
 
-        if (idx < gameState.inventory.length) {
-            const itemId = gameState.inventory[idx];
-            const item = ITEMS[itemId];
-            if (item) {
-                slot.classList.add('filled');
-                if (gameState.selectedForCombine.includes(itemId)) {
-                    slot.classList.add('selected');
-                }
-                slot.textContent = item.icon;
-                slot.title = item.name;
-                slot.onclick = () => toggleSelectForCombine(itemId);
-            }
+    // Configurar estilos para scroll/deslizamiento horizontal infinito
+    container.style.display = 'flex';
+    container.style.flexWrap = 'nowrap';
+    container.style.overflowX = 'auto';
+    container.style.overflowY = 'hidden';
+    container.style.gap = '8px';
+    container.style.padding = '4px 2px 6px';
+    container.style.scrollbarWidth = 'thin';
+    container.style.webkitOverflowScrolling = 'touch';
+
+    container.innerHTML = '';
+
+    // Renderizar todos los objetos que posee el jugador
+    gameState.inventory.forEach(itemId => {
+        const item = ITEMS[itemId];
+        if (!item) return;
+
+        const slot = document.createElement('div');
+        slot.className = 'slot-item filled';
+        slot.style.flex = '0 0 46px';
+        slot.style.width = '46px';
+        slot.style.height = '46px';
+        slot.style.minWidth = '46px';
+        slot.style.minHeight = '46px';
+
+        if (gameState.selectedForCombine.includes(itemId)) {
+            slot.classList.add('selected');
         }
+        slot.textContent = item.icon;
+        slot.title = item.name;
+
+        // Si es combinable (cable, conector) se selecciona; si es pergamino/núcleo/etc se abre para leer
+        slot.onclick = () => {
+            if (isItemCombinable(itemId)) {
+                toggleSelectForCombine(itemId);
+            } else {
+                sfx.click();
+                openInspectModal(item.name, item.icon, item.desc);
+            }
+        };
+
+        container.appendChild(slot);
     });
+
+    // Añadir huecos vacíos mínimos para estética de barra
+    const minVisibleSlots = 8;
+    const emptySlotsNeeded = Math.max(0, minVisibleSlots - gameState.inventory.length);
+    for (let i = 0; i < emptySlotsNeeded; i++) {
+        const emptySlot = document.createElement('div');
+        emptySlot.className = 'slot-item empty';
+        emptySlot.style.flex = '0 0 46px';
+        emptySlot.style.width = '46px';
+        emptySlot.style.height = '46px';
+        emptySlot.style.minWidth = '46px';
+        emptySlot.style.minHeight = '46px';
+        container.appendChild(emptySlot);
+    }
 
     const combineBtn = document.getElementById('btn-combine');
     if (combineBtn) {
@@ -818,7 +875,7 @@ function toggleSelectForCombine(itemId) {
 function handleItemCombination() {
     if (gameState.selectedForCombine.length !== 2) {
         sfx.error();
-        showDialogue('Selecciona exactamente 2 objetos para intentar combinarlos.');
+        showDialogue('Selecciona exactamente 2 objetos combinables en tu inventario.');
         return;
     }
 
@@ -948,7 +1005,7 @@ function renderHintsAndCodex() {
 }
 
 // ==========================================
-// 7. LÓGICA DE PUZLES (SECTORES 1 AL 8)
+// 7. LÓGICA DE PUZLES (CORREGIDOS Y 100% SOLUCIONABLES)
 // ==========================================
 
 // --- PUZLE 1: WORDLOCK (SEC-01) ---
@@ -1188,14 +1245,10 @@ function setupPipesListeners() {
                 return;
             }
 
-            let isComplete = true;
-            for (const [tileIdx, valids] of Object.entries(PUZZLE_SOLUTIONS.pipesValidRotations)) {
-                const currentRot = pipeRotations[parseInt(tileIdx, 10)];
-                if (!valids.includes(currentRot)) {
-                    isComplete = false;
-                    break;
-                }
-            }
+            const r1 = pipeRotations[1];
+            const r2 = pipeRotations[2];
+            const r5 = pipeRotations[5];
+            const isComplete = ([0, 2].includes(r1) && r2 === 2 && [1, 3].includes(r5));
 
             const statusEl = document.getElementById('flow-status');
             if (isComplete) {
@@ -1310,10 +1363,10 @@ function setupCodebreakerListeners() {
 // --- PUZLE 7: MATRIZ DE SOPORTE VITAL (SEC-07) ---
 function initLightsGrid() {
     lightsGridState = [
-        true, false, true, false,
-        false, true, false, true,
         true, false, false, true,
-        false, true, true, false
+        false, true, true, false,
+        false, true, true, false,
+        true, false, false, true
     ];
     updateLightsGridUI();
 }
