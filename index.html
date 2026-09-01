@@ -3,33 +3,64 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="THE VAULT — escape room interactivo de cumpleaños. Ocho sectores, puzzles de lógica y un código maestro que abre el regalo final.">
+    <meta name="theme-color" content="#0a0e0f">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%94%90%3C/text%3E%3C/svg%3E">
     <title>THE VAULT: Escape Room Gigante</title>
-    
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
-    
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<noscript>
+    <div style="padding:40px 20px;text-align:center;color:#eef2f0;background:#0a0e0f;font-family:sans-serif;">
+        THE VAULT necesita JavaScript activado para funcionar. Actívalo y recarga la página.
+    </div>
+</noscript>
 
     <main id="app-container">
-        
+
+        <!-- CAPA DECORATIVA: SCANLINES Y PARTÍCULAS AMBIENTALES -->
+        <div class="scanline-overlay" aria-hidden="true"></div>
+        <div class="ambient-particles" id="ambient-particles" aria-hidden="true">
+            <span class="particle p1"></span><span class="particle p2"></span><span class="particle p3"></span>
+            <span class="particle p4"></span><span class="particle p5"></span><span class="particle p6"></span>
+            <span class="particle p7"></span><span class="particle p8"></span><span class="particle p9"></span>
+            <span class="particle p10"></span><span class="particle p11"></span><span class="particle p12"></span>
+        </div>
+
         <!-- PANTALLA DE INICIO ARCADE -->
         <section id="start-screen" class="screen active">
             <div class="start-card">
-                <div class="cyber-badge">⚠️ MODO DESAFÍO ACTIVO ⚠️</div>
-                <h1 class="title">THE VAULT</h1>
-                <p class="subtitle">Estás atrapado en un complejo industrial de 6 sectores. Resuelve las pruebas, combina herramientas y desbloquea el núcleo para obtener tu regalo de cumpleaños.</p>
-                <div class="glitch-icon">⚙️⚡🔓</div>
-                <button id="btn-start" class="btn-cyber pulse">INICIAR ESCAPE ROOM</button>
-                <button id="btn-continue" class="btn-cyber-sec hidden">CONTINUAR PARTIDA</button>
+                <div class="cyber-badge">⚠️ ACCESO DE ALTO RIESGO ⚠️</div>
+                <h1 class="title" data-text="THE VAULT">THE VAULT</h1>
+                <p class="subtitle">Ocho sectores. Un solo objetivo: reunir los núcleos de energía y el código maestro antes de que el complejo colapse. Las pistas de un sector suelen resolver el puzzle de otro, así que explora, anota y combina lo que encuentres.</p>
+
+                <details class="briefing">
+                    <summary>📋 Briefing de la misión</summary>
+                    <ul>
+                        <li>Toca los puntos brillantes de cada sala para investigar.</li>
+                        <li>Combina objetos del inventario para crear herramientas nuevas.</li>
+                        <li>Anota los datos sueltos: casi ninguna pista se usa en la misma sala donde aparece.</li>
+                        <li>Tu progreso se guarda solo. Puedes cerrar y volver cuando quieras.</li>
+                    </ul>
+                </details>
+
+                <div class="glitch-icon" aria-hidden="true">⚙️⚡🔓</div>
+
+                <p id="existing-save-warning" class="save-warning hidden">⚠️ Ya existe una partida guardada. "Iniciar" la borrará.</p>
+
+                <button id="btn-start" class="btn-cyber pulse">Iniciar escape room</button>
+                <button id="btn-continue" class="btn-cyber-sec hidden">Continuar partida</button>
             </div>
         </section>
 
         <!-- PANTALLA DE JUEGO PRINCIPAL -->
         <section id="game-screen" class="screen">
-            
+
             <!-- HEADER CON NAVEGACIÓN Y MENÚ -->
             <header id="game-header">
                 <div class="header-left">
@@ -37,14 +68,27 @@
                     <span id="current-room-title" class="room-title">Taller de Control</span>
                 </div>
                 <div class="header-right">
-                    <button id="btn-map" class="header-btn" title="Minimapa">🗺️</button>
-                    <button id="btn-hint" class="header-btn" title="Pistas">💡</button>
-                    <button id="btn-save" class="header-btn" title="Guardar">💾</button>
-                    <button id="btn-reset" class="header-btn" title="Reiniciar">🔄</button>
+                    <button id="btn-map" class="header-btn" title="Minimapa" aria-label="Abrir minimapa de sectores">🗺️</button>
+                    <button id="btn-databank" class="header-btn" title="Bitácora y pistas" aria-label="Abrir bitácora y pistas">📖</button>
+                    <button id="btn-sound" class="header-btn" title="Silenciar sonido" aria-label="Activar o silenciar sonido" data-sound-on="true">🔊</button>
+                    <button id="btn-save" class="header-btn" title="Guardar" aria-label="Guardar partida">💾</button>
+                    <button id="btn-reset" class="header-btn" title="Reiniciar" aria-label="Reiniciar partida">🔄</button>
                 </div>
             </header>
 
-            <!-- VISTA DE ESCENARIOS (6 SALAS ILUSTRADAS) -->
+            <!-- BARRA DE PROGRESO POR SECTORES -->
+            <div id="progress-track" class="progress-track" aria-hidden="true">
+                <span class="progress-seg" data-seg="1"></span>
+                <span class="progress-seg" data-seg="2"></span>
+                <span class="progress-seg" data-seg="3"></span>
+                <span class="progress-seg" data-seg="4"></span>
+                <span class="progress-seg" data-seg="5"></span>
+                <span class="progress-seg" data-seg="6"></span>
+                <span class="progress-seg" data-seg="7"></span>
+                <span class="progress-seg" data-seg="8"></span>
+            </div>
+
+            <!-- VISTA DE ESCENARIOS (8 SALAS ILUSTRADAS) -->
             <div id="stage-view">
 
                 <!-- SALA 1: TALLER DE CONTROL -->
@@ -55,53 +99,66 @@
                             <div class="ill-workbench">🛠️</div>
                             <div class="ill-terminal">🖥️</div>
                             <div class="ill-chest">🧰</div>
+                            <div class="ill-corkboard">📌</div>
                         </div>
                     </div>
-                    
-                    <button class="hotspot" style="top: 55%; left: 8%; width: 30%; height: 22%;" data-action="inspect-workbench">
+
+                    <button class="hotspot" style="top: 6%; left: 6%; width: 26%; height: 16%;" data-action="inspect-corkboard" data-hotspot-type="lore" aria-label="Examinar la pizarra de turno">
+                        <span class="hotspot-sparkle"></span>
+                        <span class="hotspot-label">Pizarra de Turno</span>
+                    </button>
+
+                    <button class="hotspot" style="top: 58%; left: 6%; width: 32%; height: 20%;" data-action="inspect-workbench" data-hotspot-type="item" aria-label="Examinar la mesa de trabajo">
                         <span class="hotspot-sparkle"></span>
                         <span class="hotspot-label">Mesa de Trabajo</span>
                     </button>
 
-                    <button class="hotspot" style="top: 20%; left: 35%; width: 30%; height: 25%;" data-action="inspect-terminal">
+                    <button class="hotspot" style="top: 16%; left: 36%; width: 30%; height: 24%;" data-action="inspect-terminal" data-hotspot-type="lore" aria-label="Examinar la terminal de diagnóstico">
                         <span class="hotspot-sparkle"></span>
-                        <span class="hotspot-label">Terminal de Control</span>
+                        <span class="hotspot-label">Terminal de Diagnóstico</span>
                     </button>
 
-                    <button class="hotspot" style="top: 62%; left: 65%; width: 28%; height: 24%;" data-action="open-chest-modal">
+                    <button class="hotspot" style="top: 60%; left: 64%; width: 30%; height: 24%;" data-action="open-chest-modal" data-hotspot-type="puzzle" aria-label="Examinar el cofre de acero">
                         <span class="hotspot-sparkle"></span>
                         <span class="hotspot-label">Cofre de Acero</span>
                     </button>
 
-                    <button class="hotspot" style="top: 84%; left: 38%; width: 25%; height: 12%;" data-action="inspect-panel-floor">
+                    <button class="hotspot" style="top: 83%; left: 34%; width: 22%; height: 11%;" data-action="inspect-floor-panel" data-hotspot-type="item" aria-label="Examinar la tapa suelta del suelo">
+                        <span class="hotspot-sparkle"></span>
                         <span class="hotspot-label">Tapa Suelta</span>
                     </button>
 
-                    <button class="nav-arrow nav-right" data-target-room="2">➡️</button>
+                    <button class="nav-arrow nav-right" data-target-room="2" aria-label="Ir al sector 2">➡️</button>
                 </article>
 
-                <!-- SALA 2: LABORATORIO ELECTRÓNICO -->
+                <!-- SALA 2: LABORATORIO ELÉCTRICO -->
                 <article id="room-2" class="room-view" data-room-id="2">
                     <div class="room-bg bg-sector-2">
                         <div class="cyber-grid"></div>
                         <div class="room-illustration">
                             <div class="ill-circuit">⚡</div>
                             <div class="ill-server">🎛️</div>
+                            <div class="ill-diagnostics">📟</div>
                         </div>
                     </div>
 
-                    <button class="hotspot" style="top: 28%; left: 10%; width: 36%; height: 32%;" data-action="open-circuit-modal">
+                    <button class="hotspot" style="top: 8%; left: 60%; width: 28%; height: 16%;" data-action="inspect-diagnostics-panel" data-hotspot-type="lore" aria-label="Examinar el panel de diagnóstico">
+                        <span class="hotspot-sparkle"></span>
+                        <span class="hotspot-label">Panel de Diagnóstico</span>
+                    </button>
+
+                    <button class="hotspot" style="top: 26%; left: 8%; width: 38%; height: 32%;" data-action="open-circuit-modal" data-hotspot-type="puzzle" aria-label="Examinar el cuadro de circuitos">
                         <span class="hotspot-sparkle"></span>
                         <span class="hotspot-label">Cuadro de Circuitos</span>
                     </button>
 
-                    <button class="hotspot" style="top: 52%; left: 55%; width: 35%; height: 32%;" data-action="inspect-server">
+                    <button class="hotspot" style="top: 50%; left: 54%; width: 38%; height: 34%;" data-action="inspect-server" data-hotspot-type="lore" aria-label="Examinar el rack de servidores">
                         <span class="hotspot-sparkle"></span>
                         <span class="hotspot-label">Rack de Servidores</span>
                     </button>
 
-                    <button class="nav-arrow nav-left" data-target-room="1">⬅️</button>
-                    <button class="nav-arrow nav-right" data-target-room="3">➡️</button>
+                    <button class="nav-arrow nav-left" data-target-room="1" aria-label="Ir al sector 1">⬅️</button>
+                    <button class="nav-arrow nav-right" data-target-room="3" aria-label="Ir al sector 3">➡️</button>
                 </article>
 
                 <!-- SALA 3: ARCHIVO DE CIFRADOS -->
@@ -111,21 +168,27 @@
                         <div class="room-illustration">
                             <div class="ill-archives">📚</div>
                             <div class="ill-safe">🔐</div>
+                            <div class="ill-mapwall">🗺️</div>
                         </div>
                     </div>
 
-                    <button class="hotspot" style="top: 18%; left: 12%; width: 34%; height: 52%;" data-action="inspect-archives">
+                    <button class="hotspot" style="top: 6%; left: 50%; width: 30%; height: 16%;" data-action="inspect-facility-map" data-hotspot-type="lore" aria-label="Examinar el mapa de la instalación">
+                        <span class="hotspot-sparkle"></span>
+                        <span class="hotspot-label">Mapa de la Instalación</span>
+                    </button>
+
+                    <button class="hotspot" style="top: 20%; left: 8%; width: 34%; height: 50%;" data-action="inspect-archives" data-hotspot-type="lore" aria-label="Examinar los estantes de planos">
                         <span class="hotspot-sparkle"></span>
                         <span class="hotspot-label">Estantes de Planos</span>
                     </button>
 
-                    <button class="hotspot" style="top: 40%; left: 60%; width: 30%; height: 30%;" data-action="open-safe-modal">
+                    <button class="hotspot" style="top: 40%; left: 58%; width: 32%; height: 32%;" data-action="open-safe-modal" data-hotspot-type="puzzle" aria-label="Examinar la caja fuerte">
                         <span class="hotspot-sparkle"></span>
                         <span class="hotspot-label">Caja Fuerte V3</span>
                     </button>
 
-                    <button class="nav-arrow nav-left" data-target-room="2">⬅️</button>
-                    <button class="nav-arrow nav-right" data-target-room="4">➡️</button>
+                    <button class="nav-arrow nav-left" data-target-room="2" aria-label="Ir al sector 2">⬅️</button>
+                    <button class="nav-arrow nav-right" data-target-room="4" aria-label="Ir al sector 4">➡️</button>
                 </article>
 
                 <!-- SALA 4: ESTUDIO ACÚSTICO -->
@@ -135,49 +198,116 @@
                         <div class="room-illustration">
                             <div class="ill-synth">🎹</div>
                             <div class="ill-speaker">🔊</div>
+                            <div class="ill-mixer">🎚️</div>
                         </div>
                     </div>
 
-                    <button class="hotspot" style="top: 48%; left: 22%; width: 55%; height: 32%;" data-action="open-synth-modal">
+                    <button class="hotspot" style="top: 12%; left: 6%; width: 28%; height: 22%;" data-action="inspect-mixing-desk" data-hotspot-type="lore" aria-label="Examinar la mesa de mezclas">
+                        <span class="hotspot-sparkle"></span>
+                        <span class="hotspot-label">Mesa de Mezclas</span>
+                    </button>
+
+                    <button class="hotspot" style="top: 50%; left: 20%; width: 58%; height: 32%;" data-action="open-synth-modal" data-hotspot-type="puzzle" aria-label="Examinar el sintetizador modular">
                         <span class="hotspot-sparkle"></span>
                         <span class="hotspot-label">Sintetizador Modular</span>
                     </button>
 
-                    <button class="hotspot" style="top: 15%; left: 70%; width: 22%; height: 28%;" data-action="inspect-speakers">
+                    <button class="hotspot" style="top: 12%; left: 70%; width: 24%; height: 26%;" data-action="inspect-speakers" data-hotspot-type="lore" aria-label="Examinar el monitor de audio">
                         <span class="hotspot-label">Monitor de Audio</span>
                     </button>
 
-                    <button class="nav-arrow nav-left" data-target-room="3">⬅️</button>
-                    <button class="nav-arrow nav-right" data-target-room="5">➡️</button>
+                    <button class="nav-arrow nav-left" data-target-room="3" aria-label="Ir al sector 3">⬅️</button>
+                    <button class="nav-arrow nav-right" data-target-room="5" aria-label="Ir al sector 5">➡️</button>
                 </article>
 
-                <!-- SALA 5: PLANTA DE FLUIDOS Y HIDRÁULICA -->
+                <!-- SALA 5: PLANTA DE FLUIDOS -->
                 <article id="room-5" class="room-view" data-room-id="5">
                     <div class="room-bg bg-sector-5">
                         <div class="cyber-grid"></div>
                         <div class="room-illustration">
-                            <div class="ill-valves">🚰</div>
+                            <div class="ill-pipes">🔧</div>
+                            <div class="ill-gauges">🌡️</div>
                             <div class="ill-drain">🌀</div>
                         </div>
                     </div>
 
-                    <button class="hotspot" style="top: 28%; left: 18%; width: 64%; height: 38%;" data-action="open-valves-modal">
+                    <button class="hotspot" style="top: 22%; left: 16%; width: 66%; height: 40%;" data-action="open-pipes-modal" data-hotspot-type="puzzle" aria-label="Examinar la consola de tuberías">
                         <span class="hotspot-sparkle"></span>
-                        <span class="hotspot-label">Consola de Válvulas</span>
+                        <span class="hotspot-label">Consola de Tuberías</span>
                     </button>
 
-                    <button class="hotspot" style="top: 72%; left: 75%; width: 18%; height: 20%;" data-action="inspect-drain">
+                    <button class="hotspot" style="top: 70%; left: 8%; width: 26%; height: 20%;" data-action="inspect-pressure-gauges" data-hotspot-type="lore" aria-label="Examinar los manómetros de presión">
+                        <span class="hotspot-label">Manómetros</span>
+                    </button>
+
+                    <button class="hotspot" style="top: 70%; left: 68%; width: 24%; height: 20%;" data-action="inspect-drain-grate" data-hotspot-type="lore" aria-label="Examinar la rejilla de drenaje">
                         <span class="hotspot-sparkle"></span>
                         <span class="hotspot-label">Rejilla de Drenaje</span>
                     </button>
 
-                    <button class="nav-arrow nav-left" data-target-room="4">⬅️</button>
-                    <button class="nav-arrow nav-right" data-target-room="6">➡️</button>
+                    <button class="nav-arrow nav-left" data-target-room="4" aria-label="Ir al sector 4">⬅️</button>
+                    <button class="nav-arrow nav-right" data-target-room="6" aria-label="Ir al sector 6">➡️</button>
                 </article>
 
-                <!-- SALA 6: LA BÓVEDA NÚCLEO (FINAL) -->
+                <!-- SALA 6: CENTRO DE VIGILANCIA -->
                 <article id="room-6" class="room-view" data-room-id="6">
                     <div class="room-bg bg-sector-6">
+                        <div class="cyber-grid"></div>
+                        <div class="room-illustration">
+                            <div class="ill-monitors">🛰️</div>
+                            <div class="ill-cams">📹</div>
+                        </div>
+                    </div>
+
+                    <button class="hotspot" style="top: 10%; left: 64%; width: 30%; height: 20%;" data-action="inspect-security-monitors" data-hotspot-type="lore" aria-label="Examinar los monitores de seguridad">
+                        <span class="hotspot-sparkle"></span>
+                        <span class="hotspot-label">Monitores de Seguridad</span>
+                    </button>
+
+                    <button class="hotspot" style="top: 28%; left: 12%; width: 48%; height: 34%;" data-action="open-codebreaker-modal" data-hotspot-type="puzzle" aria-label="Examinar la consola de vigilancia">
+                        <span class="hotspot-sparkle"></span>
+                        <span class="hotspot-label">Consola de Vigilancia</span>
+                    </button>
+
+                    <button class="hotspot" style="top: 68%; left: 60%; width: 32%; height: 22%;" data-action="inspect-camera-log" data-hotspot-type="lore" aria-label="Examinar el registro de cámaras">
+                        <span class="hotspot-label">Registro de Cámaras</span>
+                    </button>
+
+                    <button class="nav-arrow nav-left" data-target-room="5" aria-label="Ir al sector 5">⬅️</button>
+                    <button class="nav-arrow nav-right" data-target-room="7" aria-label="Ir al sector 7">➡️</button>
+                </article>
+
+                <!-- SALA 7: CÁMARA CRIOGÉNICA -->
+                <article id="room-7" class="room-view" data-room-id="7">
+                    <div class="room-bg bg-sector-7">
+                        <div class="cyber-grid"></div>
+                        <div class="room-illustration">
+                            <div class="ill-emergency">🚨</div>
+                            <div class="ill-cryopod">🧊</div>
+                        </div>
+                    </div>
+
+                    <button class="hotspot" style="top: 20%; left: 14%; width: 50%; height: 36%;" data-action="open-lightsgrid-modal" data-hotspot-type="puzzle" aria-label="Examinar la matriz de emergencia">
+                        <span class="hotspot-sparkle"></span>
+                        <span class="hotspot-label">Matriz de Emergencia</span>
+                    </button>
+
+                    <button class="hotspot" style="top: 56%; left: 64%; width: 30%; height: 32%;" data-action="inspect-cryo-pod" data-hotspot-type="lore" aria-label="Examinar la cápsula criogénica">
+                        <span class="hotspot-sparkle"></span>
+                        <span class="hotspot-label">Cápsula Criogénica</span>
+                    </button>
+
+                    <button class="hotspot" style="top: 64%; left: 8%; width: 26%; height: 22%;" data-action="inspect-emergency-locker" data-hotspot-type="lore" aria-label="Examinar la taquilla de emergencia">
+                        <span class="hotspot-label">Taquilla de Emergencia</span>
+                    </button>
+
+                    <button class="nav-arrow nav-left" data-target-room="6" aria-label="Ir al sector 6">⬅️</button>
+                    <button class="nav-arrow nav-right" data-target-room="8" aria-label="Ir al sector 8">➡️</button>
+                </article>
+
+                <!-- SALA 8: LA BÓVEDA (FINAL) -->
+                <article id="room-8" class="room-view" data-room-id="8">
+                    <div class="room-bg bg-sector-8">
                         <div class="cyber-grid"></div>
                         <div class="room-illustration">
                             <div class="ill-door">🚪</div>
@@ -185,36 +315,39 @@
                     </div>
 
                     <div class="master-altar">
-                        <div class="altar-status" id="master-status">ESTADO: 0/4 NÚCLEOS INSTALADOS</div>
-                        <div class="slots-4grid">
-                            <button class="vault-slot" id="vslot-1" data-vslot="1">🔒</button>
-                            <button class="vault-slot" id="vslot-2" data-vslot="2">🔒</button>
-                            <button class="vault-slot" id="vslot-3" data-vslot="3">🔒</button>
-                            <button class="vault-slot" id="vslot-4" data-vslot="4">🔒</button>
+                        <div class="altar-status" id="master-status">ESTADO: 0/7 NÚCLEOS INSTALADOS</div>
+                        <div class="slots-7grid">
+                            <button class="vault-slot" id="vslot-1" data-vslot="1" aria-label="Receptáculo de núcleo 1">🔒</button>
+                            <button class="vault-slot" id="vslot-2" data-vslot="2" aria-label="Receptáculo de núcleo 2">🔒</button>
+                            <button class="vault-slot" id="vslot-3" data-vslot="3" aria-label="Receptáculo de núcleo 3">🔒</button>
+                            <button class="vault-slot" id="vslot-4" data-vslot="4" aria-label="Receptáculo de núcleo 4">🔒</button>
+                            <button class="vault-slot" id="vslot-5" data-vslot="5" aria-label="Receptáculo de núcleo 5">🔒</button>
+                            <button class="vault-slot" id="vslot-6" data-vslot="6" aria-label="Receptáculo de núcleo 6">🔒</button>
+                            <button class="vault-slot" id="vslot-7" data-vslot="7" aria-label="Receptáculo de núcleo 7">🔒</button>
                         </div>
                     </div>
 
-                    <button class="hotspot" style="top: 10%; left: 20%; width: 60%; height: 52%;" data-action="inspect-master-door">
+                    <button class="hotspot" style="top: 8%; left: 16%; width: 68%; height: 50%;" data-action="inspect-master-door" data-hotspot-type="puzzle" aria-label="Examinar la compuerta blindada principal">
                         <span class="hotspot-sparkle"></span>
-                        <span class="hotspot-label">COMPUERTA BLINDADA PRINCIPAL</span>
+                        <span class="hotspot-label">Compuerta Blindada Principal</span>
                     </button>
 
-                    <button class="nav-arrow nav-left" data-target-room="5">⬅️</button>
+                    <button class="nav-arrow nav-left" data-target-room="7" aria-label="Ir al sector 7">⬅️</button>
                 </article>
 
             </div>
 
             <!-- TERMINAL DE COMUNICACIÓN / TEXTO DE DIÁLOGOS -->
             <div id="dialogue-box">
-                <div class="diag-header">⚡ TERMINAL DE DATOS:</div>
-                <p id="dialogue-text">Explora los sectores. Selecciona objetos de tu inventario para combinarlos o usarlos.</p>
+                <div class="diag-header">⚡ Terminal de datos</div>
+                <p id="dialogue-text">Explora los sectores. Toca los objetos de tu inventario para combinarlos o usarlos.</p>
             </div>
 
             <!-- BARRA DE INVENTARIO Y HERRAMIENTA DE COMBINACIÓN -->
             <footer id="inventory-bar">
                 <div class="inventory-top">
-                    <span>INVENTARIO TÁCTICO (<span id="inv-count">0</span>/6)</span>
-                    <button id="btn-combine" class="btn-combine-action">⚡ COMBINAR (0)</button>
+                    <span>Inventario táctico (<span id="inv-count">0</span>/8)</span>
+                    <button id="btn-combine" class="btn-combine-action">⚡ Combinar (0)</button>
                 </div>
                 <div id="inventory-slots" class="inventory-slots">
                     <div class="slot-item empty" data-slot="0"></div>
@@ -223,92 +356,123 @@
                     <div class="slot-item empty" data-slot="3"></div>
                     <div class="slot-item empty" data-slot="4"></div>
                     <div class="slot-item empty" data-slot="5"></div>
+                    <div class="slot-item empty" data-slot="6"></div>
+                    <div class="slot-item empty" data-slot="7"></div>
                 </div>
             </footer>
         </section>
 
-        <!-- MODALES DE PUZLES AVANZADOS -->
+        <!-- ============================= MODALES ============================= -->
 
         <!-- MODAL: MAPA INTERACTIVO -->
-        <div id="modal-map" class="modal-overlay hidden">
+        <div id="modal-map" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="map-title">
             <div class="modal-card">
-                <button class="modal-close-btn" data-close-modal>✖</button>
-                <h3>🗺️ NAVEGADOR DE SECTORES</h3>
-                <p class="modal-sub">Haz tap sobre un sector desbloqueado para viajar rápidamente:</p>
+                <button class="modal-close-btn" data-close-modal aria-label="Cerrar">✖</button>
+                <h3 id="map-title">🗺️ Navegador de sectores</h3>
+                <p class="modal-sub">Toca un sector desbloqueado para viajar directamente:</p>
                 <div class="map-grid">
-                    <button class="map-node active" data-goto-room="1">SEC-01<br><small>Taller</small></button>
-                    <button class="map-node" id="mnode-2" data-goto-room="2">SEC-02<br><small>Circuito</small></button>
+                    <button class="map-node active" id="mnode-1" data-goto-room="1">SEC-01<br><small>Taller</small></button>
+                    <button class="map-node" id="mnode-2" data-goto-room="2">SEC-02<br><small>Laboratorio</small></button>
                     <button class="map-node" id="mnode-3" data-goto-room="3">SEC-03<br><small>Archivo</small></button>
-                    <button class="map-node" id="mnode-4" data-goto-room="4">SEC-04<br><small>Audio</small></button>
+                    <button class="map-node" id="mnode-4" data-goto-room="4">SEC-04<br><small>Estudio</small></button>
                     <button class="map-node" id="mnode-5" data-goto-room="5">SEC-05<br><small>Fluidos</small></button>
-                    <button class="map-node" id="mnode-6" data-goto-room="6">SEC-06<br><small>Núcleo</small></button>
+                    <button class="map-node" id="mnode-6" data-goto-room="6">SEC-06<br><small>Vigilancia</small></button>
+                    <button class="map-node" id="mnode-7" data-goto-room="7">SEC-07<br><small>Cámara fría</small></button>
+                    <button class="map-node" id="mnode-8" data-goto-room="8">SEC-08<br><small>Bóveda</small></button>
                 </div>
             </div>
         </div>
 
-        <!-- MODAL 1: CANDADO ALFANUMÉRICO (WORDLOCK) -->
-        <div id="modal-wordlock" class="modal-overlay hidden">
+        <!-- MODAL: BITÁCORA (PISTAS + CÓDIGO MAESTRO) -->
+        <div id="modal-help" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="help-title">
+            <div class="modal-card modal-card--scroll">
+                <button class="modal-close-btn" data-close-modal aria-label="Cerrar">✖</button>
+                <h3 id="help-title">📖 Bitácora del operario</h3>
+
+                <p class="modal-section-label">Pistas activas</p>
+                <div id="hints-list" class="hints-list"></div>
+
+                <p class="modal-section-label">Código maestro recuperado</p>
+                <p class="modal-sub modal-sub--tight">Cada sector esconde un fragmento. Los necesitarás todos para la compuerta del Sector 08.</p>
+                <div class="codex-fragments" id="codex-fragments">
+                    <span class="codex-frag" id="codex-frag-1" data-frag="1">?</span>
+                    <span class="codex-frag" id="codex-frag-2" data-frag="2">?</span>
+                    <span class="codex-frag" id="codex-frag-3" data-frag="3">?</span>
+                    <span class="codex-frag" id="codex-frag-4" data-frag="4">?</span>
+                    <span class="codex-frag" id="codex-frag-5" data-frag="5">?</span>
+                    <span class="codex-frag" id="codex-frag-6" data-frag="6">?</span>
+                    <span class="codex-frag" id="codex-frag-7" data-frag="7">?</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL 1 (SEC-01): CANDADO DE COMBINACIÓN DEL COFRE -->
+        <div id="modal-wordlock" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="wordlock-title">
             <div class="modal-card">
-                <button class="modal-close-btn" data-close-modal>✖</button>
-                <h3>🔐 CIERRE ALFANUMÉRICO</h3>
-                <p class="modal-sub">Introduce el código alfabético de 4 caracteres:</p>
+                <button class="modal-close-btn" data-close-modal aria-label="Cerrar">✖</button>
+                <h3 id="wordlock-title">🔐 Cierre de combinación</h3>
+                <p class="modal-sub">Introduce la palabra clave de 4 letras grabada en el taller:</p>
                 <div class="wheels-container">
                     <div class="wheel-col">
-                        <button class="wheel-arrow" data-wheel="0" data-dir="up">▲</button>
+                        <button class="wheel-arrow" data-wheel="0" data-dir="up" aria-label="Subir letra 1">▲</button>
                         <div class="wheel-val" id="wheel-0">A</div>
-                        <button class="wheel-arrow" data-wheel="0" data-dir="down">▼</button>
+                        <button class="wheel-arrow" data-wheel="0" data-dir="down" aria-label="Bajar letra 1">▼</button>
                     </div>
                     <div class="wheel-col">
-                        <button class="wheel-arrow" data-wheel="1" data-dir="up">▲</button>
+                        <button class="wheel-arrow" data-wheel="1" data-dir="up" aria-label="Subir letra 2">▲</button>
                         <div class="wheel-val" id="wheel-1">A</div>
-                        <button class="wheel-arrow" data-wheel="1" data-dir="down">▼</button>
+                        <button class="wheel-arrow" data-wheel="1" data-dir="down" aria-label="Bajar letra 2">▼</button>
                     </div>
                     <div class="wheel-col">
-                        <button class="wheel-arrow" data-wheel="2" data-dir="up">▲</button>
+                        <button class="wheel-arrow" data-wheel="2" data-dir="up" aria-label="Subir letra 3">▲</button>
                         <div class="wheel-val" id="wheel-2">A</div>
-                        <button class="wheel-arrow" data-wheel="2" data-dir="down">▼</button>
+                        <button class="wheel-arrow" data-wheel="2" data-dir="down" aria-label="Bajar letra 3">▼</button>
                     </div>
                     <div class="wheel-col">
-                        <button class="wheel-arrow" data-wheel="3" data-dir="up">▲</button>
+                        <button class="wheel-arrow" data-wheel="3" data-dir="up" aria-label="Subir letra 4">▲</button>
                         <div class="wheel-val" id="wheel-3">A</div>
-                        <button class="wheel-arrow" data-wheel="3" data-dir="down">▼</button>
+                        <button class="wheel-arrow" data-wheel="3" data-dir="down" aria-label="Bajar letra 4">▼</button>
                     </div>
                 </div>
-                <button id="btn-check-wordlock" class="btn-cyber">VERIFICAR CÓDIGO</button>
+                <button id="btn-check-wordlock" class="btn-cyber">Verificar código</button>
             </div>
         </div>
 
-        <!-- MODAL 2: PUZLE DE CABLES / CIRCUITOS -->
-        <div id="modal-circuit" class="modal-overlay hidden">
+        <!-- MODAL 2 (SEC-02): PUENTE DE CIRCUITOS -->
+        <div id="modal-circuit" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="circuit-title">
             <div class="modal-card">
-                <button class="modal-close-btn" data-close-modal>✖</button>
-                <h3>⚡ PUENTE DE CIRCUITOS</h3>
-                <p class="modal-sub">Enciende los 3 interruptores para alcanzar los 240V necesarios:</p>
+                <button class="modal-close-btn" data-close-modal aria-label="Cerrar">✖</button>
+                <h3 id="circuit-title">⚡ Puente de circuitos</h3>
+                <p class="modal-sub">Reproduce el patrón exacto de relés indicado en el diagnóstico:</p>
                 <div class="circuit-board">
                     <div class="wire-row">
-                        <span>LÍNEA ALPHA (+80V):</span>
+                        <span>Línea Alpha</span>
                         <button class="switch-btn" id="sw-0" data-sw="0">OFF</button>
                     </div>
                     <div class="wire-row">
-                        <span>LÍNEA BETA (+80V):</span>
+                        <span>Línea Beta</span>
                         <button class="switch-btn" id="sw-1" data-sw="1">OFF</button>
                     </div>
                     <div class="wire-row">
-                        <span>LÍNEA GAMMA (+80V):</span>
+                        <span>Línea Gamma</span>
                         <button class="switch-btn" id="sw-2" data-sw="2">OFF</button>
                     </div>
+                    <div class="wire-row">
+                        <span>Línea Delta</span>
+                        <button class="switch-btn" id="sw-3" data-sw="3">OFF</button>
+                    </div>
                 </div>
-                <div id="circuit-voltage" class="voltage-meter">VOLTAJE: 0V / 240V</div>
-                <button id="btn-check-circuit" class="btn-cyber" style="margin-top: 15px;">ACTIVAR PUENTE</button>
+                <div id="circuit-pattern" class="pattern-readout">PATRÓN: OFF-OFF-OFF-OFF</div>
+                <button id="btn-check-circuit" class="btn-cyber" style="margin-top: 15px;">Activar puente</button>
             </div>
         </div>
 
-        <!-- MODAL 3: CAJA FUERTE CON RETARDO -->
-        <div id="modal-safe" class="modal-overlay hidden">
+        <!-- MODAL 3 (SEC-03): CAJA FUERTE CIFRADA -->
+        <div id="modal-safe" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="safe-title">
             <div class="modal-card">
-                <button class="modal-close-btn" data-close-modal>✖</button>
-                <h3>🔢 TECLADO DE SEGURIDAD</h3>
-                <p class="modal-sub">Introduce la clave numérica de 4 dígitos:</p>
+                <button class="modal-close-btn" data-close-modal aria-label="Cerrar">✖</button>
+                <h3 id="safe-title">🔢 Teclado cifrado</h3>
+                <p class="modal-sub">Descifra la clave numérica de 4 dígitos con la tabla de sustitución:</p>
                 <div class="keypad-display" id="safe-display">____</div>
                 <div class="keypad-grid">
                     <button class="key-btn" data-key="1">1</button>
@@ -327,13 +491,15 @@
             </div>
         </div>
 
-        <!-- MODAL 4: SINTETIZADOR MODULAR DE MÚSICA -->
-        <div id="modal-synth" class="modal-overlay hidden">
+        <!-- MODAL 4 (SEC-04): SINTETIZADOR — MEMORIA CRECIENTE -->
+        <div id="modal-synth" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="synth-title">
             <div class="modal-card">
-                <button class="modal-close-btn" data-close-modal>✖</button>
-                <h3>🎹 SINTETIZADOR MODULAR</h3>
-                <p class="modal-sub">Reproduce la secuencia armónica exacta de 4 notas:</p>
-                <div id="synth-history" class="synth-history">SECUENCIA: <span>----</span></div>
+                <button class="modal-close-btn" data-close-modal aria-label="Cerrar">✖</button>
+                <h3 id="synth-title">🎹 Sintetizador modular</h3>
+                <p class="modal-sub">Escucha la secuencia y repítela. Cada ronda añade una nota:</p>
+                <div id="synth-round" class="synth-round">RONDA 1 / 5</div>
+                <div id="synth-history" class="synth-history">TU ENTRADA: <span id="synth-current">----</span></div>
+                <button id="btn-play-sequence" class="btn-cyber-sec">▶ Reproducir secuencia</button>
                 <div class="synth-keyboard">
                     <button class="synth-key" data-note="DO">DO</button>
                     <button class="synth-key" data-note="RE">RE</button>
@@ -343,88 +509,178 @@
                     <button class="synth-key" data-note="LA">LA</button>
                     <button class="synth-key" data-note="SI">SI</button>
                 </div>
-                <button id="btn-reset-synth" class="btn-cyber-sec" style="margin-top: 12px;">BORRAR ENTRADA</button>
+                <button id="btn-reset-synth" class="btn-cyber-sec" style="margin-top: 12px;">Borrar intento</button>
             </div>
         </div>
 
-        <!-- MODAL 5: PUZLE DE VÁLVULAS DE PRESIÓN -->
-        <div id="modal-valves" class="modal-overlay hidden">
-            <div class="modal-card">
-                <button class="modal-close-btn" data-close-modal>✖</button>
-                <h3>🚰 CONTROL DE VÁLVULAS</h3>
-                <p class="modal-sub">Ajusta los 3 manómetros a los valores requeridos:</p>
-                <div class="valves-flex">
-                    <div class="valve-box">
-                        <span>V1</span>
-                        <button class="btn-valve" data-valve="0">▲</button>
-                        <div class="valve-val" id="valve-0">0</div>
+        <!-- MODAL 5 (SEC-05): EMPALME DE TUBERÍAS -->
+        <div id="modal-pipes" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="pipes-title">
+            <div class="modal-card modal-card--wide">
+                <button class="modal-close-btn" data-close-modal aria-label="Cerrar">✖</button>
+                <h3 id="pipes-title">🔧 Empalme de tuberías</h3>
+                <p class="modal-sub">Gira las piezas y conecta el tanque con la válvula de salida:</p>
+                <div class="pipes-grid" id="pipes-grid">
+                    <button class="pipe-tile pipe-fixed pipe-source" data-tile="0" data-type="source" aria-label="Entrada de flujo">IN</button>
+                    <button class="pipe-tile" data-tile="1" data-type="straight" data-rotation="0" aria-label="Tubería giratoria 1">━</button>
+                    <button class="pipe-tile" data-tile="2" data-type="elbow" data-rotation="0" aria-label="Tubería giratoria 2">┗</button>
+                    <button class="pipe-tile" data-tile="3" data-type="elbow" data-rotation="0" aria-label="Tubería giratoria 3">┗</button>
+                    <button class="pipe-tile pipe-fixed pipe-blocked" data-tile="4" data-type="blocked" aria-label="Tramo obstruido" tabindex="-1">▓</button>
+                    <button class="pipe-tile" data-tile="5" data-type="straight" data-rotation="0" aria-label="Tubería giratoria 5">━</button>
+                    <button class="pipe-tile" data-tile="6" data-type="elbow" data-rotation="0" aria-label="Tubería giratoria 6">┗</button>
+                    <button class="pipe-tile" data-tile="7" data-type="elbow" data-rotation="0" aria-label="Tubería giratoria 7">┗</button>
+                    <button class="pipe-tile pipe-fixed pipe-sink" data-tile="8" data-type="sink" aria-label="Salida de flujo">OUT</button>
+                </div>
+                <div id="flow-status" class="flow-status">ESTADO: SIN CONEXIÓN</div>
+                <button id="btn-check-pipes" class="btn-cyber" style="margin-top: 12px;">Verificar flujo</button>
+            </div>
+        </div>
+
+        <!-- MODAL 6 (SEC-06): DESCIFRADOR DE VIGILANCIA (MASTERMIND) -->
+        <div id="modal-codebreaker" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="codebreaker-title">
+            <div class="modal-card modal-card--scroll">
+                <button class="modal-close-btn" data-close-modal aria-label="Cerrar">✖</button>
+                <h3 id="codebreaker-title">🛰️ Descifrador de vigilancia</h3>
+                <p class="modal-sub">Deduce el código de 4 símbolos en 8 intentos como máximo. Toca cada hueco para cambiar el símbolo:</p>
+                <div class="code-symbols-legend" id="code-symbols-legend" aria-hidden="true">🔴 🟡 🟢 🔵 🟣 ⚪</div>
+                <div class="guess-row" id="guess-row">
+                    <button class="peg-slot" data-peg="0" aria-label="Símbolo 1">❔</button>
+                    <button class="peg-slot" data-peg="1" aria-label="Símbolo 2">❔</button>
+                    <button class="peg-slot" data-peg="2" aria-label="Símbolo 3">❔</button>
+                    <button class="peg-slot" data-peg="3" aria-label="Símbolo 4">❔</button>
+                </div>
+                <button id="btn-submit-guess" class="btn-cyber">Probar combinación</button>
+                <div id="guess-attempts" class="guess-attempts">Intentos: 0 / 8</div>
+                <p class="feedback-legend">✅ símbolo y posición correctos · 🟨 símbolo correcto, posición incorrecta</p>
+                <div id="guess-history" class="guess-history"></div>
+            </div>
+        </div>
+
+        <!-- MODAL 7 (SEC-07): MATRIZ DE EMERGENCIA (LIGHTS OUT) -->
+        <div id="modal-lightsgrid" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="lightsgrid-title">
+            <div class="modal-card modal-card--wide">
+                <button class="modal-close-btn" data-close-modal aria-label="Cerrar">✖</button>
+                <h3 id="lightsgrid-title">❄️ Matriz de emergencia</h3>
+                <p class="modal-sub">Activa todas las luces de soporte vital. Cada pulsación conmuta la celda y sus vecinas directas:</p>
+                <div class="lights-grid" id="lights-grid">
+                    <button class="light-cell" data-cell="0" aria-label="Celda 1"></button>
+                    <button class="light-cell" data-cell="1" aria-label="Celda 2"></button>
+                    <button class="light-cell" data-cell="2" aria-label="Celda 3"></button>
+                    <button class="light-cell" data-cell="3" aria-label="Celda 4"></button>
+                    <button class="light-cell" data-cell="4" aria-label="Celda 5"></button>
+                    <button class="light-cell" data-cell="5" aria-label="Celda 6"></button>
+                    <button class="light-cell" data-cell="6" aria-label="Celda 7"></button>
+                    <button class="light-cell" data-cell="7" aria-label="Celda 8"></button>
+                    <button class="light-cell" data-cell="8" aria-label="Celda 9"></button>
+                    <button class="light-cell" data-cell="9" aria-label="Celda 10"></button>
+                    <button class="light-cell" data-cell="10" aria-label="Celda 11"></button>
+                    <button class="light-cell" data-cell="11" aria-label="Celda 12"></button>
+                    <button class="light-cell" data-cell="12" aria-label="Celda 13"></button>
+                    <button class="light-cell" data-cell="13" aria-label="Celda 14"></button>
+                    <button class="light-cell" data-cell="14" aria-label="Celda 15"></button>
+                    <button class="light-cell" data-cell="15" aria-label="Celda 16"></button>
+                </div>
+                <button id="btn-reset-lights" class="btn-cyber-sec" style="margin-top: 12px;">Reiniciar matriz</button>
+            </div>
+        </div>
+
+        <!-- MODAL 8 (SEC-08): CIERRE MAESTRO DE LA COMPUERTA -->
+        <div id="modal-mastercode" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="mastercode-title">
+            <div class="modal-card modal-card--wide">
+                <button class="modal-close-btn" data-close-modal aria-label="Cerrar">✖</button>
+                <h3 id="mastercode-title">🚪 Cierre maestro</h3>
+                <p class="modal-sub">Introduce el código de 7 dígitos reunido en la bitácora:</p>
+                <div class="master-wheels-container">
+                    <div class="wheel-col wheel-col--sm">
+                        <button class="wheel-arrow" data-mwheel="0" data-dir="up" aria-label="Subir dígito 1">▲</button>
+                        <div class="wheel-val" id="mwheel-0">0</div>
+                        <button class="wheel-arrow" data-mwheel="0" data-dir="down" aria-label="Bajar dígito 1">▼</button>
                     </div>
-                    <div class="valve-box">
-                        <span>V2</span>
-                        <button class="btn-valve" data-valve="1">▲</button>
-                        <div class="valve-val" id="valve-1">0</div>
+                    <div class="wheel-col wheel-col--sm">
+                        <button class="wheel-arrow" data-mwheel="1" data-dir="up" aria-label="Subir dígito 2">▲</button>
+                        <div class="wheel-val" id="mwheel-1">0</div>
+                        <button class="wheel-arrow" data-mwheel="1" data-dir="down" aria-label="Bajar dígito 2">▼</button>
                     </div>
-                    <div class="valve-box">
-                        <span>V3</span>
-                        <button class="btn-valve" data-valve="2">▲</button>
-                        <div class="valve-val" id="valve-2">0</div>
+                    <div class="wheel-col wheel-col--sm">
+                        <button class="wheel-arrow" data-mwheel="2" data-dir="up" aria-label="Subir dígito 3">▲</button>
+                        <div class="wheel-val" id="mwheel-2">0</div>
+                        <button class="wheel-arrow" data-mwheel="2" data-dir="down" aria-label="Bajar dígito 3">▼</button>
+                    </div>
+                    <div class="wheel-col wheel-col--sm">
+                        <button class="wheel-arrow" data-mwheel="3" data-dir="up" aria-label="Subir dígito 4">▲</button>
+                        <div class="wheel-val" id="mwheel-3">0</div>
+                        <button class="wheel-arrow" data-mwheel="3" data-dir="down" aria-label="Bajar dígito 4">▼</button>
+                    </div>
+                    <div class="wheel-col wheel-col--sm">
+                        <button class="wheel-arrow" data-mwheel="4" data-dir="up" aria-label="Subir dígito 5">▲</button>
+                        <div class="wheel-val" id="mwheel-4">0</div>
+                        <button class="wheel-arrow" data-mwheel="4" data-dir="down" aria-label="Bajar dígito 5">▼</button>
+                    </div>
+                    <div class="wheel-col wheel-col--sm">
+                        <button class="wheel-arrow" data-mwheel="5" data-dir="up" aria-label="Subir dígito 6">▲</button>
+                        <div class="wheel-val" id="mwheel-5">0</div>
+                        <button class="wheel-arrow" data-mwheel="5" data-dir="down" aria-label="Bajar dígito 6">▼</button>
+                    </div>
+                    <div class="wheel-col wheel-col--sm">
+                        <button class="wheel-arrow" data-mwheel="6" data-dir="up" aria-label="Subir dígito 7">▲</button>
+                        <div class="wheel-val" id="mwheel-6">0</div>
+                        <button class="wheel-arrow" data-mwheel="6" data-dir="down" aria-label="Bajar dígito 7">▼</button>
                     </div>
                 </div>
-                <button id="btn-check-valves" class="btn-cyber" style="margin-top: 15px;">IGUALAR PRESIÓN</button>
+                <button id="btn-check-mastercode" class="btn-cyber" style="margin-top: 15px;">Abrir compuerta</button>
             </div>
         </div>
 
-        <!-- MODAL DE INSPECCIÓN Y PISTAS -->
-        <div id="modal-inspect" class="modal-overlay hidden">
+        <!-- MODAL DE INSPECCIÓN Y OBJETOS -->
+        <div id="modal-inspect" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="inspect-title">
             <div class="modal-card">
-                <button class="modal-close-btn" data-close-modal>✖</button>
-                <h3 id="inspect-title">OBJETO</h3>
-                <div id="inspect-icon" class="inspect-icon">🔍</div>
+                <button class="modal-close-btn" data-close-modal aria-label="Cerrar">✖</button>
+                <h3 id="inspect-title">Objeto</h3>
+                <div id="inspect-icon" class="inspect-icon" aria-hidden="true">🔍</div>
                 <p id="inspect-text" class="modal-sub"></p>
-                <button id="btn-collect-item" class="btn-cyber hidden">GUARDAR EN INVENTARIO</button>
-            </div>
-        </div>
-
-        <div id="modal-hints" class="modal-overlay hidden">
-            <div class="modal-card">
-                <button class="modal-close-btn" data-close-modal>✖</button>
-                <h3>💡 BASE DE DATOS DE PISTAS</h3>
-                <div id="hints-list" class="hints-list"></div>
+                <p id="inspect-fragment-badge" class="fragment-badge hidden">🧩 Fragmento del código maestro obtenido</p>
+                <button id="btn-collect-item" class="btn-cyber hidden">Guardar en inventario</button>
             </div>
         </div>
 
         <!-- PANTALLA FINAL DE VICTORIA Y REGALO -->
-        <div id="modal-victory" class="modal-overlay victory-overlay hidden">
+        <div id="modal-victory" class="modal-overlay victory-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="victory-title">
+            <div class="confetti-layer" id="confetti-layer" aria-hidden="true"></div>
             <div class="victory-card">
                 <div class="victory-header">
-                    <h2>🏆 COMPLEJO DESBLOQUEADO 🏆</h2>
-                    <p class="victory-sub">¡Has superado los 6 sectores de puzles!</p>
+                    <h2 id="victory-title">🏆 Complejo desbloqueado 🏆</h2>
+                    <p class="victory-sub">Has superado los 8 sectores del protocolo.</p>
+                </div>
+
+                <div class="victory-stats">
+                    <div class="victory-stat"><span class="victory-stat-label">Tiempo</span><span id="victory-stat-time" class="victory-stat-value">00:00</span></div>
+                    <div class="victory-stat"><span class="victory-stat-label">Pistas usadas</span><span id="victory-stat-hints" class="victory-stat-value">0</span></div>
                 </div>
 
                 <div class="photo-frame-wrapper">
                     <div class="photo-frame">
-                        <img id="victory-photo" src="assets/nuestra-foto.jpg" alt="Foto Recompensa" onerror="this.src='https://images.unsplash.com/photo-1518199266791-5375a83190b7?auto=format&fit=crop&w=600&q=80'">
+                        <img id="victory-photo" src="./pao.jpg" alt="Foto Recompensa">
                         <div class="star-badge">👑</div>
                     </div>
                 </div>
 
                 <div class="message-box">
-                    <p>¡Victoria impecable! Has demostrado una capacidad brutal para resolver puzles complejos. Como recompensa por completar el juego, aquí tienes la canción exclusiva creada para ti por tu cumpleaños.</p>
+                    <p>Victoria, aqui tienes una canción exclusiva para tu cumpleaños.</p>
                 </div>
 
                 <div class="audio-player-container">
-                    <div class="audio-title">🎧 Canción de Cumpleaños</div>
+                    <div class="audio-title">🎧 Canción para mi alfa mewing</div>
                     <audio id="audio-element" controls controlsList="nodownload">
-                        <source src="assets/cancion.mp3" type="audio/mpeg">
+                        <source src="./AlfaMewingYogurGriego.mp3" type="audio/mpeg">
                         Tu navegador no soporta reproducción de audio.
                     </audio>
+                    <p class="audio-fallback-note">¿No suena? Comprueba que "cancion.mp3" esté dentro de la carpeta assets.</p>
                 </div>
 
-                <a id="download-link" href="assets/cancion.mp3" download="Cancion_Cumpleanos.mp3" class="btn-download">
-                    <span>📥</span> Descargar Canción MP3
+                <a id="download-link" href="./AlfaMewingYogurGriego.mp3" download="Cancion_Cumpleanos.mp3" class="btn-download">
+                    <span>📥</span> Descargar canción MP3
                 </a>
 
-                <button id="btn-restart-game" class="btn-cyber-sec" style="margin-top: 15px;">Reiniciar Partida</button>
+                <button id="btn-restart-game" class="btn-cyber-sec" style="margin-top: 15px;">Reiniciar partida</button>
             </div>
         </div>
 

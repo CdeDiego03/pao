@@ -1,491 +1,779 @@
-const GAME_STATE_KEY = 'the_vault_game_state';
+/**
+ * THE VAULT: ESCAPE ROOM INTERACTIVO (8 SECTORES)
+ * Motor de Juego: Exploración Libre, Avisos HUD Flotantes (Toasts sobre Modales) y Pistas Desacopladas
+ */
 
-let gameState = {
-    currentRoom: 1,
-    maxUnlockedRoom: 1,
-    inventory: [],
-    selectedForCombine: [],
-    solvedPuzzles: {
-        wordlock: false,
-        circuit: false,
-        safe: false,
-        synth: false,
-        valves: false
-    },
-    placedCores: [false, false, false, false],
-    discoveredItems: []
-};
+// ==========================================
+// 1. CONSTANTES, AUDIO Y ESTADO GLOBAL
+// ==========================================
+const SAVE_KEY = 'THE_VAULT_SAVE_DATA_V5';
 
-// ÍTEMS Y RECETAS DE COMBINACIÓN
+// Sistema de Audio Sintetizado (Web Audio API)
+class SoundFX {
+    constructor() {
+        this.ctx = null;
+        this.enabled = true;
+    }
+
+    init() {
+        if (!this.ctx) {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (AudioCtx) this.ctx = new AudioCtx();
+        }
+        if (this.ctx && this.ctx.state === 'suspended') {
+            this.ctx.resume();
+        }
+    }
+
+    toggle() {
+        this.enabled = !this.enabled;
+        return this.enabled;
+    }
+
+    playTone(freq, type = 'sine', duration = 0.15, gainVal = 0.12) {
+        if (!this.enabled) return;
+        try {
+            this.init();
+            if (!this.ctx) return;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+            gain.gain.setValueAtTime(gainVal, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + duration);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start();
+            osc.stop(this.ctx.currentTime + duration);
+        } catch (e) {
+            console.warn('Audio no disponible:', e);
+        }
+    }
+
+    click() { this.playTone(850, 'triangle', 0.04, 0.08); }
+    beep(freq = 600) { this.playTone(freq, 'sine', 0.1, 0.1); }
+    gear() { this.playTone(180, 'square', 0.06, 0.05); }
+    itemPickup() {
+        this.playTone(520, 'sine', 0.08, 0.1);
+        setTimeout(() => this.playTone(780, 'sine', 0.15, 0.12), 70);
+    }
+    error() {
+        this.playTone(130, 'sawtooth', 0.22, 0.15);
+        setTimeout(() => this.playTone(110, 'sawtooth', 0.22, 0.15), 110);
+    }
+    success() {
+        const notes = [523.25, 659.25, 783.99, 1046.50];
+        notes.forEach((freq, idx) => {
+            setTimeout(() => this.playTone(freq, 'sine', 0.18, 0.12), idx * 80);
+        });
+    }
+    victoryFanfare() {
+        const fanfare = [
+            { f: 523.25, d: 0.15 }, { f: 659.25, d: 0.15 },
+            { f: 783.99, d: 0.15 }, { f: 1046.5, d: 0.35 },
+            { f: 880.00, d: 0.2 },  { f: 1046.5, d: 0.6 }
+        ];
+        let delay = 0;
+        fanfare.forEach(item => {
+            setTimeout(() => this.playTone(item.f, 'sine', item.d, 0.15), delay);
+            delay += item.d * 1000 + 40;
+        });
+    }
+}
+
+const sfx = new SoundFX();
+
+// Diccionario de Objetos y Recetas
 const ITEMS = {
-    'cable_rojo': { name: 'Cable Rojo', icon: '🧵', desc: 'Un trozo de cable aislado sin conector.' },
-    'conector': { name: 'Conector', icon: '🔌', desc: 'Un terminal de cobre pequeño.' },
-    'cable_reparado': { name: 'Cable Aislado', icon: '⚡', desc: 'Cable con conector listo para circuitos.' },
-    'nota_synth': { name: 'Partitura Digital', icon: '📜', desc: 'Nota hallada en el cofre: "Secuencia audio: SOL - LA - DO - MI".' },
-    'plano_valvulas': { name: 'Planos de Presión', icon: '📋', desc: 'Anotación: "Ajustar manómetros a la secuencia 5 - 3 - 8".' },
-    'core_1': { name: 'Núcleo Alfa', icon: '🔮', desc: 'Núcleo energético hallado en el cofre del Sector 1.' },
-    'core_2': { name: 'Núcleo Beta', icon: '💎', desc: 'Cristal energético recuperado del circuito del Sector 2.' },
-    'core_3': { name: 'Núcleo Gamma', icon: '🧩', desc: 'Módulo extraído de la caja fuerte del Sector 3.' },
-    'core_4': { name: 'Núcleo Delta', icon: '⭐', desc: 'Dispositivo liberado al igualar la presión en el Sector 5.' }
+    'cable_rojo': { 
+        name: 'Cable de Cobre', 
+        icon: '🧵', 
+        desc: 'Un tramo de cable conductor de cobre sin terminal.' 
+    },
+    'conector': { 
+        name: 'Conector Rápido', 
+        icon: '🔌', 
+        desc: 'Un terminal metálico de empalme rápido.' 
+    },
+    'cable_reparado': { 
+        name: 'Cable Aislado', 
+        icon: '⚡', 
+        desc: 'Cable conductor preparado con aislamiento y terminal para cerrar circuitos.' 
+    },
+    'partitura_digital': { 
+        name: 'Partitura Digital', 
+        icon: '📜', 
+        desc: 'Registro de frecuencias armónicas: DO - MI - SOL - LA - SI.' 
+    },
+    'llave_valvula': { 
+        name: 'Llave de Válvula', 
+        icon: '🗝️', 
+        desc: 'Herramienta de acero para desbloquear pasos de fluido.' 
+    },
+    'refrigerante_criogenico': { 
+        name: 'Cápsula de Refrigerante', 
+        icon: '🧪', 
+        desc: 'Cilindro térmico presurizado con nitrógeno líquido.' 
+    },
+    'chip_vigilancia': { 
+        name: 'Chip Desencriptador', 
+        icon: '💾', 
+        desc: 'Módulo electrónico con firmware de desencriptación.' 
+    },
+    'fusible_alta_tension': { 
+        name: 'Fusible Crítico', 
+        icon: '🔋', 
+        desc: 'Fusible cerámico de alta potencia intacto.' 
+    },
+
+    // Núcleos de Energía (1 a 7)
+    'core_1': { name: 'Núcleo Alfa', icon: '🔮', desc: 'Núcleo de energía 1/7 obtenido del Cofre de Acero.' },
+    'core_2': { name: 'Núcleo Beta', icon: '💎', desc: 'Núcleo de energía 2/7 obtenido del Cuadro de Circuitos.' },
+    'core_3': { name: 'Núcleo Gamma', icon: '🧩', desc: 'Núcleo de energía 3/7 obtenido de la Caja Fuerte V3.' },
+    'core_4': { name: 'Núcleo Delta', icon: '🎹', desc: 'Núcleo de energía 4/7 obtenido del Sintetizador Modular.' },
+    'core_5': { name: 'Núcleo Épsilon', icon: '🌀', desc: 'Núcleo de energía 5/7 obtenido de la Consola de Tuberías.' },
+    'core_6': { name: 'Núcleo Zeta', icon: '🛰️', desc: 'Núcleo de energía 6/7 obtenido de la Consola de Vigilancia.' },
+    'core_7': { name: 'Núcleo Omega', icon: '❄️', desc: 'Núcleo de energía 7/7 obtenido de la Matriz de Soporte Vital.' }
 };
 
 const RECIPES = [
     { ingredients: ['cable_rojo', 'conector'], result: 'cable_reparado' }
 ];
 
-// SINTETIZADOR DE SONIDOS (WEB AUDIO API)
-class CyberAudio {
-    constructor() { this.ctx = null; }
+// Nombres de los sectores
+const ROOM_NAMES = {
+    1: 'Taller de Control',
+    2: 'Laboratorio Eléctrico',
+    3: 'Archivo de Cifrados',
+    4: 'Estudio Acústico',
+    5: 'Planta de Fluidos',
+    6: 'Centro de Vigilancia',
+    7: 'Cámara Criogénica',
+    8: 'La Bóveda Principal'
+};
 
-    init() { if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)(); }
+// Soluciones fijas de los puzles
+const PUZZLE_SOLUTIONS = {
+    wordlock: 'SAWS',
+    circuitSwitches: [true, false, true, true],
+    safeCode: '8492',
+    synthSequence: ['DO', 'MI', 'SOL', 'LA', 'SI'],
+    pipesValidRotations: {
+        1: [0, 2], // horizontal
+        2: [0],    // ┗
+        3: [1],    // ┏
+        5: [0, 2], // horizontal
+        6: [2],    // ┓
+        7: [3]     // ┛
+    },
+    codebreakerSequence: ['🔴', '🟡', '🔵', '🟣'],
+    masterCode: '7492618'
+};
 
-    play(freq, type = 'sine', dur = 0.2) {
-        this.init();
-        if (!this.ctx) return;
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.type = type;
-        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
-        gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + dur);
-        osc.connect(gain);
-        gain.connect(this.ctx.destination);
-        osc.start();
-        osc.stop(this.ctx.currentTime + dur);
-    }
+// Estado del Juego
+let gameState = {
+    currentRoom: 1,
+    inventory: [],
+    selectedForCombine: [],
+    placedCores: [false, false, false, false, false, false, false],
+    solvedPuzzles: {
+        wordlock: false,
+        circuit: false,
+        safe: false,
+        synth: false,
+        pipes: false,
+        codebreaker: false,
+        lights: false,
+        masterDoor: false
+    },
+    collectedHotspots: [],
+    codexFragments: ['?', '?', '?', '?', '?', '?', '?'],
+    timeElapsed: 0,
+    hintsUsed: 0,
+    gameStarted: false,
+    gameWon: false
+};
 
-    click() { this.play(600, 'square', 0.03); }
-    success() {
-        this.play(523, 'sine', 0.1);
-        setTimeout(() => this.play(659, 'sine', 0.1), 90);
-        setTimeout(() => this.play(783, 'sine', 0.2), 180);
-    }
-    error() { this.play(140, 'sawtooth', 0.25); }
-}
-
-const audio = new CyberAudio();
-
-const NOTE_FREQS = { 'DO': 261, 'RE': 293, 'MI': 329, 'FA': 349, 'SOL': 392, 'LA': 440, 'SI': 493 };
-const SOLUTION_WORDLOCK = 'SAWS';
-const SOLUTION_SAFE = '8492';
-const SOLUTION_SYNTH = ['SOL', 'LA', 'DO', 'MI'];
-const SOLUTION_VALVES = [5, 3, 8];
-
-let currentSafeInput = '';
-let currentWheelIndices = [0, 0, 0, 0];
+// Variables volátiles de interfaz
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
-let currentSynthSequence = [];
-let circuitSwitches = [false, false, false];
-let valveValues = [0, 0, 0];
+let currentWheelIndices = [0, 0, 0, 0];
+let circuitSwitches = [false, false, false, false];
+let currentSafeInput = '';
+let currentSynthInput = [];
+let pipeRotations = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+const MASTERMIND_SYMBOLS = ['🔴', '🟡', '🟢', '🔵', '🟣', '⚪'];
+let currentMastermindGuess = ['🔴', '🔴', '🔴', '🔴'];
+let mastermindAttempts = 0;
+let lightsGridState = Array(16).fill(false);
+let masterWheelValues = [0, 0, 0, 0, 0, 0, 0];
 let pendingInspectItem = null;
+let gameTimerInterval = null;
 
+// ==========================================
+// 2. INICIALIZACIÓN Y LISTENERS
+// ==========================================
 document.addEventListener('DOMContentLoaded', () => {
     checkSavedGame();
+    initLightsGrid();
     setupEventListeners();
 });
 
 function checkSavedGame() {
-    const saved = localStorage.getItem(GAME_STATE_KEY);
-    if (saved) document.getElementById('btn-continue').classList.remove('hidden');
+    const saved = localStorage.getItem(SAVE_KEY);
+    const continueBtn = document.getElementById('btn-continue');
+    const warning = document.getElementById('existing-save-warning');
+    if (saved) {
+        if (continueBtn) continueBtn.classList.remove('hidden');
+        if (warning) warning.classList.remove('hidden');
+    }
+}
+
+function startTimer() {
+    if (gameTimerInterval) clearInterval(gameTimerInterval);
+    gameTimerInterval = setInterval(() => {
+        if (!gameState.gameWon && gameState.gameStarted) {
+            gameState.timeElapsed++;
+        }
+    }, 1000);
+}
+
+function formatTime(seconds) {
+    const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
+    const secs = (seconds % 60).toString().padStart(2, '0');
+    return `${mins}:${secs}`;
 }
 
 function setupEventListeners() {
-    document.getElementById('btn-start').addEventListener('click', () => { audio.click(); resetGameState(); startGame(); });
-    document.getElementById('btn-continue').addEventListener('click', () => { audio.click(); loadGameState(); startGame(); });
-
-    document.getElementById('btn-map').addEventListener('click', () => { audio.click(); openModal('modal-map'); updateMapUI(); });
-    document.getElementById('btn-save').addEventListener('click', () => { audio.click(); saveGameState(); showDialogue('💾 Progreso guardado.'); });
-    document.getElementById('btn-reset').addEventListener('click', () => { if(confirm('¿Reiniciar partida desde el inicio?')) { resetGameState(); location.reload(); } });
-    document.getElementById('btn-hint').addEventListener('click', () => { audio.click(); openModal('modal-hints'); renderHints(); });
-
-    document.querySelectorAll('.nav-arrow').forEach(a => {
-        a.addEventListener('click', (e) => {
-            audio.click();
-            const target = parseInt(e.currentTarget.dataset.targetRoom);
-            if (target > gameState.currentRoom && target > gameState.maxUnlockedRoom) {
-                audio.error();
-                showDialogue(`🔒 El Sector 0${target} está bloqueado. Resuelve las pruebas del sector actual para continuar.`);
-            } else {
-                changeRoom(target);
-            }
+    // Inicio / Continuar
+    const startBtn = document.getElementById('btn-start');
+    if (startBtn) {
+        startBtn.addEventListener('click', () => {
+            sfx.click();
+            resetGameState();
+            gameState.gameStarted = true;
+            launchGame();
         });
-    });
-
-    document.querySelectorAll('.map-node').forEach(mn => {
-        mn.addEventListener('click', (e) => {
-            const target = parseInt(e.currentTarget.dataset.gotoRoom);
-            if (target <= gameState.maxUnlockedRoom) {
-                audio.click();
-                closeAllModals();
-                changeRoom(target);
-            } else {
-                audio.error();
-                showDialogue(`🔒 El Sector 0${target} está bloqueado.`);
-            }
-        });
-    });
-
-    document.querySelectorAll('.hotspot').forEach(hs => {
-        hs.addEventListener('click', (e) => {
-            audio.click();
-            handleHotspotAction(e.currentTarget.dataset.action);
-        });
-    });
-
-    document.querySelectorAll('[data-close-modal]').forEach(btn => {
-        btn.addEventListener('click', () => { audio.click(); closeAllModals(); });
-    });
-
-    // Puzle 1: Wordlock
-    document.querySelectorAll('.wheel-arrow').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            rotateWheel(parseInt(e.currentTarget.dataset.wheel), e.currentTarget.dataset.dir);
-        });
-    });
-    document.getElementById('btn-check-wordlock').addEventListener('click', checkWordlockSolution);
-
-    // Puzle 2: Circuitos
-    document.querySelectorAll('.switch-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const idx = parseInt(e.currentTarget.dataset.sw);
-            circuitSwitches[idx] = !circuitSwitches[idx];
-            updateCircuitUI();
-        });
-    });
-    document.getElementById('btn-check-circuit').addEventListener('click', checkCircuitSolution);
-
-    // Puzle 3: Safe
-    document.querySelectorAll('.keypad-grid .key-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => handleKeypadInput(e.currentTarget.dataset.key));
-    });
-
-    // Puzle 4: Sintetizador
-    document.querySelectorAll('.synth-key').forEach(key => {
-        key.addEventListener('click', (e) => pressSynthNote(e.currentTarget.dataset.note));
-    });
-    document.getElementById('btn-reset-synth').addEventListener('click', () => {
-        audio.click(); currentSynthSequence = []; updateSynthDisplay();
-    });
-
-    // Puzle 5: Válvulas
-    document.querySelectorAll('.btn-valve').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const idx = parseInt(e.currentTarget.dataset.valve);
-            valveValues[idx] = (valveValues[idx] + 1) % 10;
-            document.getElementById(`valve-${idx}`).textContent = valveValues[idx];
-        });
-    });
-    document.getElementById('btn-check-valves').addEventListener('click', checkValvesSolution);
-
-    // Combinador e inventario
-    document.getElementById('btn-combine').addEventListener('click', tryCombineItems);
-    document.getElementById('btn-collect-item').addEventListener('click', () => {
-        audio.click();
-        if (pendingInspectItem) {
-            if (gameState.inventory.length >= 6) {
-                audio.error();
-                showDialogue('⚠️ Tu inventario está lleno (máximo 6 objetos).');
-            } else {
-                addItemToInventory(pendingInspectItem);
-                pendingInspectItem = null;
-                closeAllModals();
-            }
-        }
-    });
-
-    document.querySelectorAll('.vault-slot').forEach(slot => {
-        slot.addEventListener('click', (e) => {
-            handleVaultSlotClick(parseInt(e.currentTarget.dataset.vslot) - 1);
-        });
-    });
-
-    document.getElementById('btn-restart-game').addEventListener('click', () => {
-        resetGameState();
-        location.reload();
-    });
-}
-
-function changeRoom(roomNum) {
-    gameState.currentRoom = roomNum;
-    if (roomNum > gameState.maxUnlockedRoom) {
-        gameState.maxUnlockedRoom = roomNum;
     }
 
-    document.querySelectorAll('.room-view').forEach(r => r.classList.remove('active'));
-    document.getElementById(`room-${roomNum}`).classList.add('active');
+    const continueBtn = document.getElementById('btn-continue');
+    if (continueBtn) {
+        continueBtn.addEventListener('click', () => {
+            sfx.click();
+            loadGameState();
+            gameState.gameStarted = true;
+            launchGame();
+        });
+    }
 
-    const names = { 1: 'Taller', 2: 'Circuito', 3: 'Archivo', 4: 'Estudio Audio', 5: 'Planta Fluidos', 6: 'Núcleo Bóveda' };
-    document.getElementById('room-code-tag').textContent = `SEC-0${roomNum}`;
-    document.getElementById('current-room-title').textContent = names[roomNum];
-    showDialogue(`Entrando en Sector 0${roomNum}: ${names[roomNum]}`);
-    autoSave();
+    // Header y Menú
+    const mapBtn = document.getElementById('btn-map');
+    if (mapBtn) {
+        mapBtn.addEventListener('click', () => {
+            sfx.click();
+            openModal('modal-map');
+            updateMapUI();
+        });
+    }
+
+    const dataBankBtn = document.getElementById('btn-databank');
+    if (dataBankBtn) {
+        dataBankBtn.addEventListener('click', () => {
+            sfx.click();
+            gameState.hintsUsed++;
+            openModal('modal-help');
+            renderHintsAndCodex();
+            saveGameState();
+        });
+    }
+
+    const soundBtn = document.getElementById('btn-sound');
+    if (soundBtn) {
+        soundBtn.addEventListener('click', (e) => {
+            const isSoundOn = sfx.toggle();
+            e.currentTarget.textContent = isSoundOn ? '🔊' : '🔇';
+            e.currentTarget.dataset.soundOn = isSoundOn ? 'true' : 'false';
+            sfx.click();
+        });
+    }
+
+    const saveBtn = document.getElementById('btn-save');
+    if (saveBtn) {
+        saveBtn.addEventListener('click', () => {
+            sfx.click();
+            saveGameState();
+            showDialogue('💾 Partida guardada correctamente.');
+        });
+    }
+
+    const resetBtn = document.getElementById('btn-reset');
+    if (resetBtn) {
+        resetBtn.addEventListener('click', () => {
+            if (confirm('¿Reiniciar la partida? Se perderán todos los datos actuales.')) {
+                resetGameState();
+                location.reload();
+            }
+        });
+    }
+
+    // Navegación libre por flechas (todas las salas 1-8 desbloqueadas)
+    document.querySelectorAll('.nav-arrow').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const target = parseInt(e.currentTarget.dataset.targetRoom, 10);
+            if (target >= 1 && target <= 8) {
+                sfx.click();
+                changeRoom(target);
+            }
+        });
+    });
+
+    // Nodos del mapa interactivo
+    document.querySelectorAll('.map-node').forEach(node => {
+        node.addEventListener('click', (e) => {
+            const target = parseInt(e.currentTarget.dataset.gotoRoom, 10);
+            if (target >= 1 && target <= 8) {
+                sfx.click();
+                closeAllModals();
+                changeRoom(target);
+            }
+        });
+    });
+
+    // Hotspots interactivos
+    document.querySelectorAll('.hotspot').forEach(hs => {
+        hs.addEventListener('click', (e) => {
+            sfx.click();
+            handleHotspot(e.currentTarget.dataset.action);
+        });
+    });
+
+    // Botones de cierre de modales
+    document.querySelectorAll('[data-close-modal]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            sfx.click();
+            closeAllModals();
+        });
+    });
+
+    document.querySelectorAll('.modal-overlay').forEach(overlay => {
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay && !overlay.classList.contains('victory-overlay')) {
+                sfx.click();
+                closeAllModals();
+            }
+        });
+    });
+
+    // Inventario y Combinación
+    const combineBtn = document.getElementById('btn-combine');
+    if (combineBtn) {
+        combineBtn.addEventListener('click', handleItemCombination);
+    }
+
+    const collectItemBtn = document.getElementById('btn-collect-item');
+    if (collectItemBtn) {
+        collectItemBtn.addEventListener('click', collectPendingItem);
+    }
+
+    // Receptáculos de la Bóveda (Sector 8)
+    document.querySelectorAll('.vault-slot').forEach(slot => {
+        slot.addEventListener('click', (e) => {
+            const slotIndex = parseInt(e.currentTarget.dataset.vslot, 10) - 1;
+            handleVaultSlotPlacement(slotIndex);
+        });
+    });
+
+    const restartBtn = document.getElementById('btn-restart-game');
+    if (restartBtn) {
+        restartBtn.addEventListener('click', () => {
+            resetGameState();
+            location.reload();
+        });
+    }
+
+    // Listeners de puzles
+    setupWordlockListeners();
+    setupCircuitListeners();
+    setupSafeKeypadListeners();
+    setupSynthListeners();
+    setupPipesListeners();
+    setupCodebreakerListeners();
+    setupLightsGridListeners();
+    setupMasterCodeListeners();
 }
 
-function startGame() {
-    document.getElementById('start-screen').classList.remove('active');
-    document.getElementById('game-screen').classList.add('active');
+function launchGame() {
+    const startScreen = document.getElementById('start-screen');
+    const gameScreen = document.getElementById('game-screen');
+    if (startScreen) startScreen.classList.remove('active');
+    if (gameScreen) gameScreen.classList.add('active');
+
     changeRoom(gameState.currentRoom);
     updateInventoryUI();
     updateVaultSlotsUI();
+    updateProgressBar();
+    updateMapUI();
+    startTimer();
 }
 
-function handleHotspotAction(action) {
-    switch(action) {
+function changeRoom(roomNumber) {
+    gameState.currentRoom = roomNumber;
+
+    document.querySelectorAll('.room-view').forEach(view => view.classList.remove('active'));
+    const targetRoom = document.getElementById(`room-${roomNumber}`);
+    if (targetRoom) targetRoom.classList.add('active');
+
+    const codeTag = document.getElementById('room-code-tag');
+    if (codeTag) codeTag.textContent = `SEC-0${roomNumber}`;
+
+    const titleTag = document.getElementById('current-room-title');
+    if (titleTag) titleTag.textContent = ROOM_NAMES[roomNumber] || `Sector ${roomNumber}`;
+
+    updateProgressBar();
+    updateMapUI();
+    saveGameState();
+}
+
+function updateProgressBar() {
+    document.querySelectorAll('.progress-seg').forEach(seg => {
+        const segNum = parseInt(seg.dataset.seg, 10);
+        seg.className = 'progress-seg';
+
+        const isCleared = isRoomCleared(segNum);
+        if (isCleared) {
+            seg.classList.add('cleared');
+        } else if (segNum === gameState.currentRoom) {
+            seg.classList.add('active');
+        } else {
+            seg.classList.add('unlocked');
+        }
+    });
+}
+
+function isRoomCleared(roomNum) {
+    switch (roomNum) {
+        case 1: return gameState.solvedPuzzles.wordlock;
+        case 2: return gameState.solvedPuzzles.circuit;
+        case 3: return gameState.solvedPuzzles.safe;
+        case 4: return gameState.solvedPuzzles.synth;
+        case 5: return gameState.solvedPuzzles.pipes;
+        case 6: return gameState.solvedPuzzles.codebreaker;
+        case 7: return gameState.solvedPuzzles.lights;
+        case 8: return gameState.solvedPuzzles.masterDoor;
+        default: return false;
+    }
+}
+
+function updateMapUI() {
+    document.querySelectorAll('.map-node').forEach(node => {
+        const roomNum = parseInt(node.dataset.gotoRoom, 10);
+        node.classList.add('active');
+        const cleared = isRoomCleared(roomNum);
+        if (cleared) {
+            node.style.borderColor = 'var(--neon-green)';
+            node.style.boxShadow = '0 0 8px var(--neon-green-dim)';
+        } else {
+            node.style.borderColor = '';
+            node.style.boxShadow = '';
+        }
+    });
+}
+
+// ==========================================
+// 3. SISTEMA DE DIÁLOGO Y TOASTS SOBRE MODALES
+// ==========================================
+function showDialogue(text) {
+    // 1. Actualizar barra inferior fija
+    const el = document.getElementById('dialogue-text');
+    if (el) el.textContent = text;
+
+    // 2. Mostrar Toast flotante sobre cualquier modal activa
+    showToastNotification(text);
+}
+
+function showToastNotification(text) {
+    let container = document.getElementById('vault-toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'vault-toast-container';
+        container.style.cssText = `
+            position: fixed;
+            top: 22px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 99999;
+            width: 92%;
+            max-width: 420px;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            align-items: center;
+        `;
+        document.body.appendChild(container);
+    }
+
+    const isError = text.includes('❌') || text.includes('⚠️');
+    const isSuccess = text.includes('🔓') || text.includes('⚡') || text.includes('✨') || text.includes('🎹') || text.includes('🌀') || text.includes('🛰️') || text.includes('❄️');
+
+    let borderColor = 'var(--neon-cyan, #00f3ff)';
+    let shadowColor = 'rgba(0, 243, 255, 0.4)';
+    if (isError) {
+        borderColor = 'var(--neon-red, #ff0055)';
+        shadowColor = 'rgba(255, 0, 85, 0.45)';
+    } else if (isSuccess) {
+        borderColor = 'var(--neon-green, #00ff88)';
+        shadowColor = 'rgba(0, 255, 136, 0.45)';
+    }
+
+    const toast = document.createElement('div');
+    toast.className = 'vault-toast-item';
+    toast.style.cssText = `
+        background: rgba(6, 11, 18, 0.96);
+        border: 1.5px solid ${borderColor};
+        color: #ffffff;
+        padding: 11px 16px;
+        border-radius: 12px;
+        font-family: var(--font-ui, 'Rajdhani', sans-serif);
+        font-size: 13.5px;
+        font-weight: 700;
+        text-align: center;
+        line-height: 1.35;
+        box-shadow: 0 0 25px ${shadowColor};
+        backdrop-filter: blur(12px);
+        transform: translateY(-20px) scale(0.95);
+        opacity: 0;
+        transition: transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.25s ease;
+        pointer-events: auto;
+    `;
+    toast.textContent = text;
+    container.appendChild(toast);
+
+    requestAnimationFrame(() => {
+        toast.style.transform = 'translateY(0) scale(1)';
+        toast.style.opacity = '1';
+    });
+
+    setTimeout(() => {
+        toast.style.transform = 'translateY(-15px) scale(0.95)';
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 260);
+    }, 3200);
+}
+
+function openModal(modalId) {
+    const modal = document.getElementById(modalId);
+    if (modal) modal.classList.remove('hidden');
+}
+
+function closeAllModals() {
+    document.querySelectorAll('.modal-overlay').forEach(m => m.classList.add('hidden'));
+}
+
+// ==========================================
+// 4. AMBIENTACIÓN PURA (SIN SPOILERS EN TEXTO)
+// ==========================================
+function handleHotspot(action) {
+    switch (action) {
+        // --- SECTOR 1: TALLER DE CONTROL ---
+        case 'inspect-corkboard':
+            showDialogue('📌 Pizarra de Turno: Una nota de guardia garabateada muestra cuatro marcas de color: 🔴 - 🟡 - 🔵 - 🟣.');
+            break;
+
         case 'inspect-workbench':
-            if (!hasItem('cable_rojo') && !gameState.discoveredItems.includes('cable_rojo')) {
-                showDialogue('Encuentras un cable rojo suelto sobre la mesa.');
-                openInspectModal('Cable Rojo', '🧵', ITEMS['cable_rojo'].desc, 'cable_rojo');
+            if (!gameState.collectedHotspots.includes('cable_rojo') && !hasItem('cable_rojo')) {
+                openInspectModal('Cable de Cobre', '🧵', ITEMS['cable_rojo'].desc, 'cable_rojo');
             } else {
-                showDialogue('Mesa de trabajo llena de piezas sueltas.');
+                showDialogue('🛠️ Mesa de trabajo. No quedan más piezas útiles aquí.');
             }
             break;
 
-        case 'inspect-panel-floor':
-            if (!hasItem('conector') && !gameState.discoveredItems.includes('conector')) {
-                showDialogue('Al levantar la tapa suelta hallas un conector pequeño.');
-                openInspectModal('Conector', '🔌', ITEMS['conector'].desc, 'conector');
-            } else {
-                showDialogue('Espacio en el suelo donde estaba el conector.');
-            }
+        case 'inspect-floor-panel':
+            showDialogue('⚙️ Tapa metálica suelta en el suelo. Da acceso a la canaleta de cableado.');
             break;
 
         case 'inspect-terminal':
-            showDialogue('En la pantalla parpadea el mensaje: "CÓDIGO DEL COFRE = SAWS".');
+            showDialogue('🖥️ Terminal de Diagnóstico: Muestra un registro de osciloscopio: [DO - MI - SOL - LA - SI].');
             break;
 
         case 'open-chest-modal':
             if (gameState.solvedPuzzles.wordlock) {
-                showDialogue('El cofre ya está abierto. Ya recogiste el Núcleo Alfa.');
+                showDialogue('🧰 El cofre de acero ya está abierto y vacío.');
             } else {
                 openModal('modal-wordlock');
             }
             break;
 
+        // --- SECTOR 2: LABORATORIO ELÉCTRICO ---
+        case 'inspect-diagnostics-panel':
+            showDialogue('📟 Panel de Diagnóstico: Esquema hidráulico: "Caudal activo por el perímetro exterior. Módulo central bloqueado".');
+            break;
+
+        case 'inspect-server':
+            showDialogue('🎛️ Rack de Servidores: Una etiqueta adhesiva desgastada tiene grabado el número: "8492".');
+            break;
+
         case 'open-circuit-modal':
             if (gameState.solvedPuzzles.circuit) {
-                showDialogue('El puente de circuitos ya fue activado.');
+                showDialogue('⚡ El puente de relés ya está energizado.');
             } else {
                 openModal('modal-circuit');
             }
             break;
 
-        case 'inspect-server':
-            showDialogue('Servidor con etiquetas de mantenimiento. Una indica: "CLAVE DE SEGURIDAD = 8492".');
+        // --- SECTOR 3: ARCHIVO DE CIFRADOS ---
+        case 'inspect-facility-map':
+            showDialogue('🗺️ Mapa de la Instalación: Diagrama estructural con 7 receptáculos de energía y una compuerta principal.');
             break;
 
         case 'inspect-archives':
-            if (!hasItem('plano_valvulas') && !gameState.discoveredItems.includes('plano_valvulas')) {
-                openInspectModal('Planos de Presión', '📋', ITEMS['plano_valvulas'].desc, 'plano_valvulas');
+            if (!gameState.collectedHotspots.includes('conector') && !hasItem('conector')) {
+                openInspectModal('Conector Rápido', '🔌', ITEMS['conector'].desc, 'conector');
             } else {
-                showDialogue('Estantes llenos de carpetas de planos viejos.');
+                showDialogue('📚 Estantes de planos y componentes electrónicos ya revisados.');
             }
             break;
 
         case 'open-safe-modal':
             if (gameState.solvedPuzzles.safe) {
-                showDialogue('La caja fuerte ya fue saqueada.');
+                showDialogue('🔐 La Caja Fuerte V3 ya está abierta.');
             } else {
                 currentSafeInput = '';
-                updateSafeDisplay();
+                updateSafeKeypadDisplay();
                 openModal('modal-safe');
             }
             break;
 
+        // --- SECTOR 4: ESTUDIO ACÚSTICO ---
+        case 'inspect-mixing-desk':
+            showDialogue('🎚️ Mesa de Mezclas: Nota técnica adjunta: "Sobrecarga lumínica requerida: 16/16 celdas activas".');
+            break;
+
+        case 'inspect-speakers':
+            showDialogue('🔊 Monitores de audio listos para emitir señal acústica.');
+            break;
+
         case 'open-synth-modal':
             if (gameState.solvedPuzzles.synth) {
-                showDialogue('El sintetizador ya está sincronizado.');
+                showDialogue('🎹 El sintetizador modular ya está calibrado.');
             } else {
-                currentSynthSequence = [];
+                currentSynthInput = [];
                 updateSynthDisplay();
                 openModal('modal-synth');
             }
             break;
 
-        case 'inspect-speakers':
-            showDialogue('Monitores de estudio. Si solucionas el sintetizador desbloquearás la siguiente sala.');
+        // --- SECTOR 5: PLANTA DE FLUIDOS ---
+        case 'inspect-pressure-gauges':
+            showDialogue('🌡️ Manómetros de Presión: Registran fluctuaciones en el caudal secundario.');
             break;
 
-        case 'open-valves-modal':
-            if (gameState.solvedPuzzles.valves) {
-                showDialogue('El sistema de válvulas ya fue regulado.');
+        case 'inspect-drain-grate':
+            if (!gameState.collectedHotspots.includes('refrigerante_criogenico') && !hasItem('refrigerante_criogenico')) {
+                openInspectModal('Cápsula de Refrigerante', '🧪', ITEMS['refrigerante_criogenico'].desc, 'refrigerante_criogenico');
             } else {
-                openModal('modal-valves');
+                showDialogue('🌀 Rejilla de drenaje con marcas de condensación helada.');
             }
             break;
 
-        case 'inspect-drain':
-            showDialogue('Rejilla de drenaje técnico.');
+        case 'open-pipes-modal':
+            if (gameState.solvedPuzzles.pipes) {
+                showDialogue('🔧 El circuito de fluidos ya está en funcionamiento.');
+            } else {
+                openModal('modal-pipes');
+            }
             break;
 
+        // --- SECTOR 6: CENTRO DE VIGILANCIA ---
+        case 'inspect-security-monitors':
+            showDialogue('🛰️ Monitores de Seguridad: Registro de telemetría: [Alpha: ON | Beta: OFF | Gamma: ON | Delta: ON].');
+            break;
+
+        case 'inspect-camera-log':
+            if (!gameState.collectedHotspots.includes('fusible_alta_tension') && !hasItem('fusible_alta_tension')) {
+                openInspectModal('Fusible Crítico', '🔋', ITEMS['fusible_alta_tension'].desc, 'fusible_alta_tension');
+            } else {
+                showDialogue('📹 Registro de cámaras secundario.');
+            }
+            break;
+
+        case 'open-codebreaker-modal':
+            if (gameState.solvedPuzzles.codebreaker) {
+                showDialogue('🛰️ La consola de vigilancia ya ha sido desbloqueada.');
+            } else {
+                openModal('modal-codebreaker');
+            }
+            break;
+
+        // --- SECTOR 7: CÁMARA CRIOGÉNICA ---
+        case 'inspect-cryo-pod':
+            showDialogue('🧊 Cápsula Criogénica sellada herméticamente bajo cero.');
+            break;
+
+        case 'inspect-emergency-locker':
+            showDialogue('🚨 Taquilla de Emergencia: En la chapa metálica hay grabada una palabra: "S A W S".');
+            break;
+
+        case 'open-lightsgrid-modal':
+            if (gameState.solvedPuzzles.lights) {
+                showDialogue('❄️ La matriz de soporte vital está completamente encendida.');
+            } else {
+                openModal('modal-lightsgrid');
+            }
+            break;
+
+        // --- SECTOR 8: LA BÓVEDA PRINCIPAL ---
         case 'inspect-master-door':
-            checkMasterDoorUnlock();
+            const placedCount = gameState.placedCores.filter(Boolean).length;
+            if (placedCount < 7) {
+                sfx.error();
+                showDialogue(`🔒 Compuerta blindada bloqueada. Faltan núcleos en el altar (${placedCount}/7 instalados).`);
+            } else {
+                openModal('modal-mastercode');
+            }
             break;
+
+        default:
+            showDialogue('No hay nada relevante que inspeccionar.');
     }
 }
 
-// LÓGICA DE PUZLES
-function rotateWheel(index, dir) {
-    audio.click();
-    if (dir === 'up') currentWheelIndices[index] = (currentWheelIndices[index] + 1) % ALPHABET.length;
-    else currentWheelIndices[index] = (currentWheelIndices[index] - 1 + ALPHABET.length) % ALPHABET.length;
-    document.getElementById(`wheel-${index}`).textContent = ALPHABET[currentWheelIndices[index]];
-}
-
-function checkWordlockSolution() {
-    const word = currentWheelIndices.map(i => ALPHABET[i]).join('');
-    if (word === SOLUTION_WORDLOCK) {
-        audio.success();
-        gameState.solvedPuzzles.wordlock = true;
-        closeAllModals();
-        showDialogue('🔓 ¡Cofre abierto! Obtienes el Núcleo Alfa y una Partitura Digital. Sector 02 desbloqueado.');
-        addItemToInventory('nota_synth');
-        openInspectModal('Núcleo Alfa', '🔮', ITEMS['core_1'].desc, 'core_1');
-        unlockNextSector(2);
-    } else {
-        audio.error();
-        showDialogue('❌ Código alfabético incorrecto.');
-    }
-}
-
-function updateCircuitUI() {
-    audio.click();
-    let voltage = 0;
-    circuitSwitches.forEach((val, idx) => {
-        const btn = document.getElementById(`sw-${idx}`);
-        if (val) {
-            btn.classList.add('on');
-            btn.textContent = 'ON';
-            voltage += 80;
-        } else {
-            btn.classList.remove('on');
-            btn.textContent = 'OFF';
-        }
-    });
-    document.getElementById('circuit-voltage').textContent = `VOLTAJE: ${voltage}V / 240V`;
-}
-
-function checkCircuitSolution() {
-    if (!hasItem('cable_reparado')) {
-        audio.error();
-        showDialogue('⚠️ Necesitas un "Cable Aislado" en tu inventario para realizar el puenteado.');
-        return;
-    }
-
-    if (circuitSwitches.every(s => s === true)) {
-        audio.success();
-        gameState.solvedPuzzles.circuit = true;
-        removeItemFromInventory('cable_reparado');
-        closeAllModals();
-        showDialogue('⚡ Circuitos alimentados. Obtienes el Núcleo Beta. Sector 03 desbloqueado.');
-        openInspectModal('Núcleo Beta', '💎', ITEMS['core_2'].desc, 'core_2');
-        unlockNextSector(3);
-    } else {
-        audio.error();
-        showDialogue('❌ Enciende los 3 interruptores para alcanzar 240V.');
-    }
-}
-
-function handleKeypadInput(key) {
-    audio.click();
-    if (key === 'C') currentSafeInput = '';
-    else if (key === 'OK') {
-        if (currentSafeInput === SOLUTION_SAFE) {
-            audio.success();
-            gameState.solvedPuzzles.safe = true;
-            closeAllModals();
-            showDialogue('🔓 Caja Fuerte abierta. Obtienes el Núcleo Gamma. Sector 04 desbloqueado.');
-            openInspectModal('Núcleo Gamma', '🧩', ITEMS['core_3'].desc, 'core_3');
-            unlockNextSector(4);
-        } else {
-            audio.error();
-            showDialogue('❌ Clave de seguridad incorrecta.');
-            currentSafeInput = '';
-        }
-    } else {
-        if (currentSafeInput.length < 4) currentSafeInput += key;
-    }
-    updateSafeDisplay();
-}
-
-function updateSafeDisplay() {
-    document.getElementById('safe-display').textContent = currentSafeInput.padEnd(4, '_');
-}
-
-function pressSynthNote(note) {
-    if (NOTE_FREQS[note]) audio.play(NOTE_FREQS[note], 'sine', 0.3);
-    if (currentSynthSequence.length < 4) {
-        currentSynthSequence.push(note);
-        updateSynthDisplay();
-    }
-    if (currentSynthSequence.length === 4) {
-        setTimeout(checkSynthSolution, 300);
-    }
-}
-
-function updateSynthDisplay() {
-    document.querySelector('#synth-history span').textContent = currentSynthSequence.length ? currentSynthSequence.join(' - ') : '----';
-}
-
-function checkSynthSolution() {
-    const isOk = currentSynthSequence.every((n, i) => n === SOLUTION_SYNTH[i]);
-    if (isOk) {
-        audio.success();
-        gameState.solvedPuzzles.synth = true;
-        closeAllModals();
-        showDialogue('🎹 Sintetizador sincronizado. Sector 05 desbloqueado.');
-        unlockNextSector(5);
-    } else {
-        audio.error();
-        showDialogue('❌ Secuencia incorrecta.');
-        currentSynthSequence = [];
-        updateSynthDisplay();
-    }
-}
-
-function checkValvesSolution() {
-    const isOk = valveValues.every((v, i) => v === SOLUTION_VALVES[i]);
-    if (isOk) {
-        audio.success();
-        gameState.solvedPuzzles.valves = true;
-        closeAllModals();
-        showDialogue('🚰 Presión equilibrada. Obtienes el Núcleo Delta. Sector 06 desbloqueado.');
-        openInspectModal('Núcleo Delta', '⭐', ITEMS['core_4'].desc, 'core_4');
-        unlockNextSector(6);
-    } else {
-        audio.error();
-        showDialogue('❌ Presión descompensada. Consulta los Planos de Presión.');
-    }
-}
-
-function unlockNextSector(sectorNum) {
-    if (sectorNum > gameState.maxUnlockedRoom) {
-        gameState.maxUnlockedRoom = sectorNum;
-        autoSave();
-    }
-}
-
-// INVENTARIO Y COMBINACIÓN
+// ==========================================
+// 5. INVENTARIO Y COMBINACIÓN
+// ==========================================
 function addItemToInventory(itemId) {
+    if (gameState.inventory.length >= 8) {
+        sfx.error();
+        showDialogue('⚠️ Tu inventario táctico está lleno (máximo 8 objetos).');
+        return false;
+    }
     if (!gameState.inventory.includes(itemId)) {
         gameState.inventory.push(itemId);
-        gameState.discoveredItems.push(itemId);
+        if (!gameState.collectedHotspots.includes(itemId)) {
+            gameState.collectedHotspots.push(itemId);
+        }
+        sfx.itemPickup();
         updateInventoryUI();
-        autoSave();
+        saveGameState();
+        return true;
     }
+    return false;
 }
 
-function hasItem(itemId) { return gameState.inventory.includes(itemId); }
+function hasItem(itemId) {
+    return gameState.inventory.includes(itemId);
+}
 
 function removeItemFromInventory(itemId) {
-    gameState.inventory = gameState.inventory.filter(i => i !== itemId);
-    gameState.selectedForCombine = gameState.selectedForCombine.filter(i => i !== itemId);
+    gameState.inventory = gameState.inventory.filter(id => id !== itemId);
+    gameState.selectedForCombine = gameState.selectedForCombine.filter(id => id !== itemId);
     updateInventoryUI();
-    autoSave();
+    saveGameState();
 }
 
 function updateInventoryUI() {
     const slots = document.querySelectorAll('#inventory-slots .slot-item');
-    document.getElementById('inv-count').textContent = gameState.inventory.length;
+    const countEl = document.getElementById('inv-count');
+    if (countEl) countEl.textContent = gameState.inventory.length;
 
     slots.forEach((slot, idx) => {
         slot.className = 'slot-item';
@@ -497,31 +785,40 @@ function updateInventoryUI() {
             const item = ITEMS[itemId];
             if (item) {
                 slot.classList.add('filled');
-                if (gameState.selectedForCombine.includes(itemId)) slot.classList.add('selected');
-                slot.innerHTML = item.icon;
+                if (gameState.selectedForCombine.includes(itemId)) {
+                    slot.classList.add('selected');
+                }
+                slot.textContent = item.icon;
+                slot.title = item.name;
                 slot.onclick = () => toggleSelectForCombine(itemId);
             }
         }
     });
 
-    document.getElementById('btn-combine').textContent = `⚡ COMBINAR (${gameState.selectedForCombine.length})`;
+    const combineBtn = document.getElementById('btn-combine');
+    if (combineBtn) {
+        combineBtn.textContent = `⚡ Combinar (${gameState.selectedForCombine.length})`;
+    }
 }
 
 function toggleSelectForCombine(itemId) {
-    audio.click();
+    sfx.click();
     if (gameState.selectedForCombine.includes(itemId)) {
         gameState.selectedForCombine = gameState.selectedForCombine.filter(i => i !== itemId);
     } else {
         if (gameState.selectedForCombine.length < 2) {
             gameState.selectedForCombine.push(itemId);
+        } else {
+            gameState.selectedForCombine = [gameState.selectedForCombine[1], itemId];
         }
     }
     updateInventoryUI();
 }
 
-function tryCombineItems() {
+function handleItemCombination() {
     if (gameState.selectedForCombine.length !== 2) {
-        showDialogue('Selecciona exactamente 2 objetos de tu inventario para intentar combinarlos.');
+        sfx.error();
+        showDialogue('Selecciona exactamente 2 objetos para intentar combinarlos.');
         return;
     }
 
@@ -531,151 +828,728 @@ function tryCombineItems() {
     );
 
     if (recipe) {
-        audio.success();
+        sfx.success();
         removeItemFromInventory(itemA);
         removeItemFromInventory(itemB);
         addItemToInventory(recipe.result);
         gameState.selectedForCombine = [];
-        showDialogue(`✨ ¡Has combinado los objetos para crear: ${ITEMS[recipe.result].name}!`);
+        showDialogue(`✨ Has fabricado: ${ITEMS[recipe.result].name}.`);
+        openInspectModal(ITEMS[recipe.result].name, ITEMS[recipe.result].icon, ITEMS[recipe.result].desc);
     } else {
-        audio.error();
+        sfx.error();
         showDialogue('❌ Esos objetos no se pueden combinar.');
         gameState.selectedForCombine = [];
         updateInventoryUI();
     }
 }
 
-// BÓVEDA FINAL
-function handleVaultSlotClick(slotIndex) {
-    if (gameState.placedCores[slotIndex]) {
-        showDialogue(`El receptáculo ${slotIndex + 1} ya tiene su núcleo instalado.`);
+function openInspectModal(title, icon, desc, itemId = null, fragment = null) {
+    const tEl = document.getElementById('inspect-title');
+    const iEl = document.getElementById('inspect-icon');
+    const dEl = document.getElementById('inspect-text');
+    if (tEl) tEl.textContent = title;
+    if (iEl) iEl.textContent = icon;
+    if (dEl) dEl.textContent = desc;
+
+    const fragBadge = document.getElementById('inspect-fragment-badge');
+    if (fragBadge) {
+        if (fragment) {
+            fragBadge.classList.remove('hidden');
+            fragBadge.textContent = `🧩 Fragmento del código maestro: "${fragment}"`;
+        } else {
+            fragBadge.classList.add('hidden');
+        }
+    }
+
+    const collectBtn = document.getElementById('btn-collect-item');
+    if (collectBtn) {
+        if (itemId && !hasItem(itemId)) {
+            pendingInspectItem = itemId;
+            collectBtn.classList.remove('hidden');
+        } else {
+            pendingInspectItem = null;
+            collectBtn.classList.add('hidden');
+        }
+    }
+
+    openModal('modal-inspect');
+}
+
+function collectPendingItem() {
+    if (pendingInspectItem) {
+        const added = addItemToInventory(pendingInspectItem);
+        if (added) {
+            showDialogue(`📦 Has guardado "${ITEMS[pendingInspectItem].name}" en tu inventario.`);
+            pendingInspectItem = null;
+            closeAllModals();
+        }
+    }
+}
+
+function unlockFragment(index, char) {
+    gameState.codexFragments[index] = char;
+    saveGameState();
+    renderHintsAndCodex();
+}
+
+// ==========================================
+// 6. BITÁCORA Y PISTAS (SÓLO AQUÍ ARRIBA)
+// ==========================================
+function renderHintsAndCodex() {
+    const list = document.getElementById('hints-list');
+    let hints = [];
+
+    if (!gameState.solvedPuzzles.wordlock) {
+        hints.push('🔍 SEC-01 (Taller): La clave de 4 letras del cofre está anotada en la taquilla de emergencia de Criogenia (SEC-07).');
+    }
+    if (!gameState.solvedPuzzles.circuit) {
+        hints.push('🔍 SEC-02 (Laboratorio): Combina el Cable (SEC-01) y el Conector (SEC-03). El orden de los relés está en los monitores de Vigilancia (SEC-06).');
+    }
+    if (!gameState.solvedPuzzles.safe) {
+        hints.push('🔍 SEC-03 (Archivo): El código numérico de 4 dígitos de la caja fuerte está en una etiqueta del servidor en el Laboratorio (SEC-02).');
+    }
+    if (!gameState.solvedPuzzles.synth) {
+        hints.push('🔍 SEC-04 (Estudio): Abre la caja fuerte (SEC-03) para conseguir la Partitura Digital e introduce las notas indicadas en la terminal de SEC-01.');
+    }
+    if (!gameState.solvedPuzzles.pipes) {
+        hints.push('🔍 SEC-05 (Fluidos): Necesitas la Llave de Válvula (SEC-04). Gira las tuberías perimetrales siguiendo el plano del panel de SEC-02.');
+    }
+    if (!gameState.solvedPuzzles.codebreaker) {
+        hints.push('🔍 SEC-06 (Vigilancia): Necesitas el Chip Desencriptador (SEC-05). La combinación de 4 colores está en la pizarra de SEC-01.');
+    }
+    if (!gameState.solvedPuzzles.lights) {
+        hints.push('🔍 SEC-07 (Criogenia): Requiere el Refrigerante (SEC-05) y el Fusible (SEC-06). Conmuta las celdas hasta que las 16 luces queden encendidas.');
+    }
+    
+    const placedCoresCount = gameState.placedCores.filter(Boolean).length;
+    if (placedCoresCount < 7) {
+        hints.push(`🔍 SEC-08 (Bóveda): Coloca los 7 núcleos en el altar (${placedCoresCount}/7 instalados).`);
+    } else if (!gameState.solvedPuzzles.masterDoor) {
+        hints.push('🔍 SEC-08 (Bóveda): Todos los núcleos instalados. Introduce el código de 7 dígitos reunido de cada sector.');
+    }
+
+    if (list) {
+        list.innerHTML = hints.length 
+            ? hints.map(h => `<p>${h}</p>`).join('') 
+            : '<p>¡Todos los sectores completados! Ve a la Bóveda del Sector 8 y abre la compuerta final.</p>';
+    }
+
+    gameState.codexFragments.forEach((frag, idx) => {
+        const el = document.getElementById(`codex-frag-${idx + 1}`);
+        if (el) {
+            el.textContent = frag;
+            if (frag !== '?') {
+                el.classList.add('unlocked');
+            } else {
+                el.classList.remove('unlocked');
+            }
+        }
+    });
+}
+
+// ==========================================
+// 7. LÓGICA DE PUZLES (SECTORES 1 AL 8)
+// ==========================================
+
+// --- PUZLE 1: WORDLOCK (SEC-01) ---
+function setupWordlockListeners() {
+    document.querySelectorAll('#modal-wordlock .wheel-arrow').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const wheel = parseInt(e.currentTarget.dataset.wheel, 10);
+            const dir = e.currentTarget.dataset.dir;
+            sfx.gear();
+            if (dir === 'up') {
+                currentWheelIndices[wheel] = (currentWheelIndices[wheel] + 1) % ALPHABET.length;
+            } else {
+                currentWheelIndices[wheel] = (currentWheelIndices[wheel] - 1 + ALPHABET.length) % ALPHABET.length;
+            }
+            const wheelVal = document.getElementById(`wheel-${wheel}`);
+            if (wheelVal) wheelVal.textContent = ALPHABET[currentWheelIndices[wheel]];
+        });
+    });
+
+    const checkBtn = document.getElementById('btn-check-wordlock');
+    if (checkBtn) {
+        checkBtn.addEventListener('click', () => {
+            const word = currentWheelIndices.map(i => ALPHABET[i]).join('');
+            if (word === PUZZLE_SOLUTIONS.wordlock) {
+                sfx.success();
+                gameState.solvedPuzzles.wordlock = true;
+                unlockFragment(0, '7');
+                closeAllModals();
+                addItemToInventory('core_1');
+                updateProgressBar();
+                updateMapUI();
+                showDialogue('🔓 Cofre de acero desbloqueado. Obtienes el Núcleo Alfa.');
+                openInspectModal('Núcleo Alfa', '🔮', ITEMS['core_1'].desc, null, '7');
+            } else {
+                sfx.error();
+                showDialogue('❌ Combinación incorrecta.');
+            }
+        });
+    }
+}
+
+// --- PUZLE 2: PUENTE DE CIRCUITOS (SEC-02) ---
+function setupCircuitListeners() {
+    document.querySelectorAll('#modal-circuit .switch-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const idx = parseInt(e.currentTarget.dataset.sw, 10);
+            circuitSwitches[idx] = !circuitSwitches[idx];
+            sfx.click();
+            e.currentTarget.classList.toggle('on', circuitSwitches[idx]);
+            e.currentTarget.textContent = circuitSwitches[idx] ? 'ON' : 'OFF';
+            
+            const str = circuitSwitches.map(s => s ? 'ON' : 'OFF').join('-');
+            const patternEl = document.getElementById('circuit-pattern');
+            if (patternEl) patternEl.textContent = `PATRÓN: ${str}`;
+        });
+    });
+
+    const checkBtn = document.getElementById('btn-check-circuit');
+    if (checkBtn) {
+        checkBtn.addEventListener('click', () => {
+            if (!hasItem('cable_reparado')) {
+                sfx.error();
+                showDialogue('⚠️ Falta un conductor aislado para cerrar el puente de relés.');
+                return;
+            }
+
+            const isMatch = circuitSwitches.every((val, i) => val === PUZZLE_SOLUTIONS.circuitSwitches[i]);
+            if (isMatch) {
+                sfx.success();
+                gameState.solvedPuzzles.circuit = true;
+                removeItemFromInventory('cable_reparado');
+                unlockFragment(1, '4');
+                closeAllModals();
+                addItemToInventory('core_2');
+                updateProgressBar();
+                updateMapUI();
+                showDialogue('⚡ Puente de relés activado. Obtienes el Núcleo Beta.');
+                openInspectModal('Núcleo Beta', '💎', ITEMS['core_2'].desc, null, '4');
+            } else {
+                sfx.error();
+                showDialogue('❌ Configuración de relés incorrecta.');
+            }
+        });
+    }
+}
+
+// --- PUZLE 3: CAJA FUERTE CIFRADA (SEC-03) ---
+function setupSafeKeypadListeners() {
+    document.querySelectorAll('#modal-safe .key-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const key = e.currentTarget.dataset.key;
+            sfx.beep(750);
+            if (key === 'C') {
+                currentSafeInput = '';
+            } else if (key === 'OK') {
+                if (currentSafeInput === PUZZLE_SOLUTIONS.safeCode) {
+                    sfx.success();
+                    gameState.solvedPuzzles.safe = true;
+                    unlockFragment(2, '9');
+                    closeAllModals();
+                    addItemToInventory('core_3');
+                    addItemToInventory('partitura_digital');
+                    updateProgressBar();
+                    updateMapUI();
+                    showDialogue('🔓 Caja Fuerte abierta. Obtienes el Núcleo Gamma y la Partitura Digital.');
+                    openInspectModal('Núcleo Gamma', '🧩', ITEMS['core_3'].desc, null, '9');
+                } else {
+                    sfx.error();
+                    showDialogue('❌ Código numérico erróneo.');
+                    currentSafeInput = '';
+                }
+            } else {
+                if (currentSafeInput.length < 4) {
+                    currentSafeInput += key;
+                }
+            }
+            updateSafeKeypadDisplay();
+        });
+    });
+}
+
+function updateSafeKeypadDisplay() {
+    const disp = document.getElementById('safe-display');
+    if (disp) disp.textContent = currentSafeInput.padEnd(4, '_');
+}
+
+// --- PUZLE 4: SINTETIZADOR MODULAR (SEC-04) ---
+const NOTE_FREQUENCIES = {
+    'DO': 261.63, 'RE': 293.66, 'MI': 329.63,
+    'FA': 349.23, 'SOL': 392.00, 'LA': 440.00, 'SI': 493.88
+};
+
+function setupSynthListeners() {
+    document.querySelectorAll('.synth-key').forEach(key => {
+        key.addEventListener('click', (e) => {
+            const note = e.currentTarget.dataset.note;
+            if (NOTE_FREQUENCIES[note]) {
+                sfx.playTone(NOTE_FREQUENCIES[note], 'sine', 0.3, 0.2);
+            }
+            if (currentSynthInput.length < 5) {
+                currentSynthInput.push(note);
+                updateSynthDisplay();
+            }
+            if (currentSynthInput.length === 5) {
+                setTimeout(checkSynthSolution, 350);
+            }
+        });
+    });
+
+    const playSeqBtn = document.getElementById('btn-play-sequence');
+    if (playSeqBtn) {
+        playSeqBtn.addEventListener('click', () => {
+            playSynthTargetSequence();
+        });
+    }
+
+    const resetSynthBtn = document.getElementById('btn-reset-synth');
+    if (resetSynthBtn) {
+        resetSynthBtn.addEventListener('click', () => {
+            sfx.click();
+            currentSynthInput = [];
+            updateSynthDisplay();
+        });
+    }
+}
+
+function playSynthTargetSequence() {
+    PUZZLE_SOLUTIONS.synthSequence.forEach((note, idx) => {
+        setTimeout(() => {
+            if (NOTE_FREQUENCIES[note]) {
+                sfx.playTone(NOTE_FREQUENCIES[note], 'sine', 0.28, 0.22);
+            }
+            const btn = document.querySelector(`.synth-key[data-note="${note}"]`);
+            if (btn) {
+                btn.classList.add('playing');
+                setTimeout(() => btn.classList.remove('playing'), 220);
+            }
+        }, idx * 400);
+    });
+}
+
+function updateSynthDisplay() {
+    const currentEl = document.getElementById('synth-current');
+    if (currentEl) {
+        currentEl.textContent = currentSynthInput.length ? currentSynthInput.join(' - ') : '----';
+    }
+}
+
+function checkSynthSolution() {
+    if (!hasItem('partitura_digital') && !gameState.solvedPuzzles.safe) {
+        sfx.error();
+        showDialogue('⚠️ El sintetizador no responde sin una referencia armónica cargada.');
+        currentSynthInput = [];
+        updateSynthDisplay();
         return;
     }
 
-    const coreReq = [`core_1`, `core_2`, `core_3`, `core_4`][slotIndex];
-    if (hasItem(coreReq)) {
-        audio.success();
-        removeItemFromInventory(coreReq);
+    const isOk = currentSynthInput.every((n, i) => n === PUZZLE_SOLUTIONS.synthSequence[i]);
+    if (isOk) {
+        sfx.success();
+        gameState.solvedPuzzles.synth = true;
+        unlockFragment(3, '2');
+        closeAllModals();
+        addItemToInventory('core_4');
+        addItemToInventory('llave_valvula');
+        updateProgressBar();
+        updateMapUI();
+        showDialogue('🎹 Sintetizador calibrado. Obtienes el Núcleo Delta y una Llave de Válvula.');
+        openInspectModal('Núcleo Delta', '🎹', ITEMS['core_4'].desc, null, '2');
+    } else {
+        sfx.error();
+        showDialogue('❌ Secuencia tonal disonante.');
+        currentSynthInput = [];
+        updateSynthDisplay();
+    }
+}
+
+// --- PUZLE 5: EMPALME DE TUBERÍAS (SEC-05) ---
+function setupPipesListeners() {
+    document.querySelectorAll('#pipes-grid .pipe-tile:not(.pipe-fixed)').forEach(tile => {
+        tile.addEventListener('click', (e) => {
+            const tileIdx = parseInt(e.currentTarget.dataset.tile, 10);
+            sfx.gear();
+            pipeRotations[tileIdx] = (pipeRotations[tileIdx] + 1) % 4;
+            const deg = pipeRotations[tileIdx] * 90;
+            e.currentTarget.style.transform = `rotate(${deg}deg)`;
+            e.currentTarget.dataset.rotation = pipeRotations[tileIdx];
+        });
+    });
+
+    const checkBtn = document.getElementById('btn-check-pipes');
+    if (checkBtn) {
+        checkBtn.addEventListener('click', () => {
+            if (!hasItem('llave_valvula')) {
+                sfx.error();
+                showDialogue('⚠️ La consola de flujo está trabada mecánicamente.');
+                return;
+            }
+
+            let isComplete = true;
+            for (const [tileIdx, valids] of Object.entries(PUZZLE_SOLUTIONS.pipesValidRotations)) {
+                const currentRot = pipeRotations[parseInt(tileIdx, 10)];
+                if (!valids.includes(currentRot)) {
+                    isComplete = false;
+                    break;
+                }
+            }
+
+            const statusEl = document.getElementById('flow-status');
+            if (isComplete) {
+                sfx.success();
+                gameState.solvedPuzzles.pipes = true;
+                removeItemFromInventory('llave_valvula');
+                unlockFragment(4, '6');
+                if (statusEl) statusEl.textContent = 'ESTADO: FLUJO CONECTADO (100%)';
+                closeAllModals();
+                addItemToInventory('core_5');
+                addItemToInventory('chip_vigilancia');
+                updateProgressBar();
+                updateMapUI();
+                showDialogue('🌀 Presión estabilizada. Obtienes el Núcleo Épsilon y un Chip Desencriptador.');
+                openInspectModal('Núcleo Épsilon', '🌀', ITEMS['core_5'].desc, null, '6');
+            } else {
+                sfx.error();
+                if (statusEl) statusEl.textContent = 'ESTADO: FUGA DETECTADA';
+                showDialogue('❌ El circuito hidráulico presenta fugas u obstrucciones.');
+            }
+        });
+    }
+}
+
+// --- PUZLE 6: DESCIFRADOR DE VIGILANCIA (SEC-06) ---
+function setupCodebreakerListeners() {
+    document.querySelectorAll('#guess-row .peg-slot').forEach(peg => {
+        peg.addEventListener('click', (e) => {
+            const idx = parseInt(e.currentTarget.dataset.peg, 10);
+            sfx.click();
+            const currSymbol = currentMastermindGuess[idx];
+            const nextIdx = (MASTERMIND_SYMBOLS.indexOf(currSymbol) + 1) % MASTERMIND_SYMBOLS.length;
+            currentMastermindGuess[idx] = MASTERMIND_SYMBOLS[nextIdx];
+            e.currentTarget.textContent = currentMastermindGuess[idx];
+        });
+    });
+
+    const submitBtn = document.getElementById('btn-submit-guess');
+    if (submitBtn) {
+        submitBtn.addEventListener('click', () => {
+            if (!hasItem('chip_vigilancia') && !gameState.solvedPuzzles.pipes) {
+                sfx.error();
+                showDialogue('⚠️ Consola bloqueada por falta de chip desencriptador.');
+                return;
+            }
+
+            mastermindAttempts++;
+            sfx.click();
+            const target = PUZZLE_SOLUTIONS.codebreakerSequence;
+            const guess = currentMastermindGuess;
+
+            let exact = 0;
+            let colorMatch = 0;
+            const targetUsed = [false, false, false, false];
+            const guessUsed = [false, false, false, false];
+
+            for (let i = 0; i < 4; i++) {
+                if (guess[i] === target[i]) {
+                    exact++;
+                    targetUsed[i] = true;
+                    guessUsed[i] = true;
+                }
+            }
+
+            for (let i = 0; i < 4; i++) {
+                if (!guessUsed[i]) {
+                    for (let j = 0; j < 4; j++) {
+                        if (!targetUsed[j] && guess[i] === target[j]) {
+                            colorMatch++;
+                            targetUsed[j] = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            const historyContainer = document.getElementById('guess-history');
+            if (historyContainer) {
+                const row = document.createElement('div');
+                row.className = 'history-item';
+                row.innerHTML = `<span>${guess.join(' ')}</span> <span>${'✅'.repeat(exact)}${'🟨'.repeat(colorMatch)}</span>`;
+                historyContainer.prepend(row);
+            }
+
+            const attemptsEl = document.getElementById('guess-attempts');
+            if (attemptsEl) attemptsEl.textContent = `Intentos: ${mastermindAttempts} / 8`;
+
+            if (exact === 4) {
+                sfx.success();
+                gameState.solvedPuzzles.codebreaker = true;
+                if (hasItem('chip_vigilancia')) removeItemFromInventory('chip_vigilancia');
+                unlockFragment(5, '1');
+                closeAllModals();
+                addItemToInventory('core_6');
+                updateProgressBar();
+                updateMapUI();
+                showDialogue('🛰️ Acceso autorizado. Obtienes el Núcleo Zeta.');
+                openInspectModal('Núcleo Zeta', '🛰️', ITEMS['core_6'].desc, null, '1');
+            } else if (mastermindAttempts >= 8) {
+                sfx.error();
+                showDialogue('⚠️ Límite de intentos alcanzado. La consola se reinicia.');
+                mastermindAttempts = 0;
+                if (historyContainer) historyContainer.innerHTML = '';
+                if (attemptsEl) attemptsEl.textContent = `Intentos: 0 / 8`;
+            } else {
+                sfx.beep(400);
+            }
+        });
+    }
+}
+
+// --- PUZLE 7: MATRIZ DE SOPORTE VITAL (SEC-07) ---
+function initLightsGrid() {
+    lightsGridState = [
+        true, false, true, false,
+        false, true, false, true,
+        true, false, false, true,
+        false, true, true, false
+    ];
+    updateLightsGridUI();
+}
+
+function setupLightsGridListeners() {
+    document.querySelectorAll('#lights-grid .light-cell').forEach(cell => {
+        cell.addEventListener('click', (e) => {
+            const idx = parseInt(e.currentTarget.dataset.cell, 10);
+            toggleLightCellAndNeighbors(idx);
+        });
+    });
+
+    const resetLightsBtn = document.getElementById('btn-reset-lights');
+    if (resetLightsBtn) {
+        resetLightsBtn.addEventListener('click', () => {
+            sfx.click();
+            initLightsGrid();
+        });
+    }
+}
+
+function toggleLightCellAndNeighbors(idx) {
+    if (!hasItem('refrigerante_criogenico') && !gameState.collectedHotspots.includes('refrigerante_criogenico')) {
+        sfx.error();
+        showDialogue('⚠️ Alerta de temperatura crítica en la matriz.');
+        return;
+    }
+
+    sfx.click();
+    const row = Math.floor(idx / 4);
+    const col = idx % 4;
+
+    const toggle = (r, c) => {
+        if (r >= 0 && r < 4 && c >= 0 && c < 4) {
+            const targetIdx = r * 4 + c;
+            lightsGridState[targetIdx] = !lightsGridState[targetIdx];
+        }
+    };
+
+    toggle(row, col);
+    toggle(row - 1, col);
+    toggle(row + 1, col);
+    toggle(row, col - 1);
+    toggle(row, col + 1);
+
+    updateLightsGridUI();
+
+    if (lightsGridState.every(Boolean)) {
+        sfx.success();
+        gameState.solvedPuzzles.lights = true;
+        if (hasItem('refrigerante_criogenico')) removeItemFromInventory('refrigerante_criogenico');
+        unlockFragment(6, '8');
+        closeAllModals();
+        addItemToInventory('core_7');
+        updateProgressBar();
+        updateMapUI();
+        showDialogue('❄️ Matriz activada al 100%. Obtienes el Núcleo Omega.');
+        openInspectModal('Núcleo Omega', '❄️', ITEMS['core_7'].desc, null, '8');
+    }
+}
+
+function updateLightsGridUI() {
+    document.querySelectorAll('#lights-grid .light-cell').forEach((cell, idx) => {
+        cell.classList.toggle('lit', lightsGridState[idx]);
+    });
+}
+
+// --- PUZLE 8: LA BÓVEDA PRINCIPAL (SEC-08) ---
+function handleVaultSlotPlacement(slotIndex) {
+    if (gameState.placedCores[slotIndex]) {
+        showDialogue(`El Altar ${slotIndex + 1} ya tiene su núcleo fijado.`);
+        return;
+    }
+
+    const coreKey = `core_${slotIndex + 1}`;
+    if (hasItem(coreKey)) {
+        sfx.success();
+        removeItemFromInventory(coreKey);
         gameState.placedCores[slotIndex] = true;
         updateVaultSlotsUI();
-        showDialogue(`⚡ Núcleo ${slotIndex + 1} insertado con éxito.`);
+        const total = gameState.placedCores.filter(Boolean).length;
+        showDialogue(`⚡ ${ITEMS[coreKey].name} fijado (${total}/7 instalados).`);
+        saveGameState();
+
+        if (total === 7) {
+            showDialogue('🌟 Los 7 núcleos de energía están fijados.');
+        }
     } else {
-        audio.error();
-        showDialogue(`Necesitas el Núcleo energéticamente correspondiente para este receptáculo.`);
+        sfx.error();
+        showDialogue(`Se requiere "${ITEMS[coreKey].name}" en el inventario.`);
     }
 }
 
 function updateVaultSlotsUI() {
-    const icons = ['🔮', '💎', '🧩', '⭐'];
+    const coreIcons = ['🔮', '💎', '🧩', '🎹', '🌀', '🛰️', '❄️'];
     gameState.placedCores.forEach((placed, idx) => {
         const slotEl = document.getElementById(`vslot-${idx + 1}`);
-        if (placed) {
-            slotEl.classList.add('filled');
-            slotEl.textContent = icons[idx];
-        } else {
-            slotEl.classList.remove('filled');
-            slotEl.textContent = '🔒';
+        if (slotEl) {
+            if (placed) {
+                slotEl.classList.add('filled');
+                slotEl.textContent = coreIcons[idx];
+            } else {
+                slotEl.classList.remove('filled');
+                slotEl.textContent = '🔒';
+            }
         }
     });
 
     const count = gameState.placedCores.filter(Boolean).length;
-    document.getElementById('master-status').textContent = `ESTADO: ${count}/4 NÚCLEOS INSTALADOS`;
-}
-
-function checkMasterDoorUnlock() {
-    if (gameState.placedCores.every(c => c === true)) {
-        audio.success();
-        triggerVictory();
-    } else {
-        audio.error();
-        showDialogue('🔒 La compuerta blindada requiere los 4 Núcleos en la consola central.');
+    const statusEl = document.getElementById('master-status');
+    if (statusEl) {
+        statusEl.textContent = `ESTADO: ${count}/7 NÚCLEOS INSTALADOS`;
     }
 }
 
-function triggerVictory() {
-    openModal('modal-victory');
-    const audioEl = document.getElementById('audio-element');
-    if (audioEl) audioEl.play().catch(() => {});
-}
-
-function updateMapUI() {
-    document.querySelectorAll('.map-node').forEach((mn, idx) => {
-        const roomNum = idx + 1;
-        if (roomNum <= gameState.maxUnlockedRoom) {
-            mn.classList.add('active');
-        } else {
-            mn.classList.remove('active');
-        }
+function setupMasterCodeListeners() {
+    document.querySelectorAll('#modal-mastercode .wheel-arrow').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const wheel = parseInt(e.currentTarget.dataset.mwheel, 10);
+            const dir = e.currentTarget.dataset.dir;
+            sfx.gear();
+            if (dir === 'up') {
+                masterWheelValues[wheel] = (masterWheelValues[wheel] + 1) % 10;
+            } else {
+                masterWheelValues[wheel] = (masterWheelValues[wheel] - 1 + 10) % 10;
+            }
+            const mwheelVal = document.getElementById(`mwheel-${wheel}`);
+            if (mwheelVal) mwheelVal.textContent = masterWheelValues[wheel];
+        });
     });
+
+    const checkBtn = document.getElementById('btn-check-mastercode');
+    if (checkBtn) {
+        checkBtn.addEventListener('click', () => {
+            const entered = masterWheelValues.join('');
+            if (entered === PUZZLE_SOLUTIONS.masterCode) {
+                sfx.victoryFanfare();
+                gameState.solvedPuzzles.masterDoor = true;
+                gameState.gameWon = true;
+                closeAllModals();
+                saveGameState();
+                triggerVictoryScreen();
+            } else {
+                sfx.error();
+                showDialogue('❌ Código maestro incorrecto.');
+            }
+        });
+    }
 }
 
-function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
-function closeAllModals() { document.querySelectorAll('.modal-overlay').forEach(m => m.classList.add('hidden')); }
+// Pantalla Final de Victoria
+function triggerVictoryScreen() {
+    const timeEl = document.getElementById('victory-stat-time');
+    const hintsEl = document.getElementById('victory-stat-hints');
+    if (timeEl) timeEl.textContent = formatTime(gameState.timeElapsed);
+    if (hintsEl) hintsEl.textContent = gameState.hintsUsed;
 
-function openInspectModal(title, icon, desc, itemId = null) {
-    document.getElementById('inspect-title').textContent = title;
-    document.getElementById('inspect-icon').textContent = icon;
-    document.getElementById('inspect-text').textContent = desc;
+    openModal('modal-victory');
+    createConfettiEffect();
 
-    const btn = document.getElementById('btn-collect-item');
-    if (itemId && !hasItem(itemId)) {
-        pendingInspectItem = itemId;
-        btn.classList.remove('hidden');
-    } else {
-        pendingInspectItem = null;
-        btn.classList.add('hidden');
+    const audioEl = document.getElementById('audio-element');
+    if (audioEl) {
+        audioEl.play().catch(() => {
+            console.log('Autoplay prevenido por el navegador.');
+        });
     }
-    openModal('modal-inspect');
 }
 
-function renderHints() {
-    const container = document.getElementById('hints-list');
-    let hints = [];
+function createConfettiEffect() {
+    const layer = document.getElementById('confetti-layer');
+    if (!layer) return;
+    layer.innerHTML = '';
+    const colors = ['#00f3ff', '#ffb700', '#ff0055', '#00ff88', '#b026ff'];
 
-    if (!hasItem('cable_reparado') && !gameState.solvedPuzzles.circuit) {
-        hints.push('💡 Sector 1: Inspecciona la mesa de trabajo y la tapa suelta. Luego pulsa "COMBINAR".');
+    for (let i = 0; i < 70; i++) {
+        const confetti = document.createElement('div');
+        confetti.className = 'confetti-piece';
+        confetti.style.left = `${Math.random() * 100}%`;
+        confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+        confetti.style.animationDuration = `${2.2 + Math.random() * 2.8}s`;
+        confetti.style.animationDelay = `${Math.random() * 2}s`;
+        layer.appendChild(confetti);
     }
-    if (!gameState.solvedPuzzles.wordlock) {
-        hints.push('💡 Sector 1: Revisa la terminal de control para descubrir el código alfabético del cofre.');
-    }
-    if (!gameState.solvedPuzzles.circuit) {
-        hints.push('💡 Sector 2: Necesitas el "Cable Aislado" en tu inventario para activar el puente de circuitos.');
-    }
-    if (!gameState.solvedPuzzles.safe) {
-        hints.push('💡 Sector 3: Inspecciona los servidores del Sector 2 para ver la clave numérica de la caja fuerte.');
-    }
-    if (!gameState.solvedPuzzles.synth) {
-        hints.push('💡 Sector 4: Revisa en tu inventario la "Partitura Digital" obtenida al abrir el cofre del Sector 1.');
-    }
-    if (!gameState.solvedPuzzles.valves) {
-        hints.push('💡 Sector 5: Inspecciona los estantes del Sector 3 para hallar los Planos de Presión.');
-    }
-
-    container.innerHTML = hints.length ? hints.map(h => `<p style="margin-bottom:8px; font-size:12px;">${h}</p>`).join('') : '<p>¡Puzles resueltos! Dirígete a la Bóveda del Sector 6.</p>';
 }
 
-showDialogue = function(txt) { document.getElementById('dialogue-text').textContent = txt; };
-autoSave = function() { saveGameState(); };
-saveGameState = function() { localStorage.setItem(GAME_STATE_KEY, JSON.stringify(gameState)); };
+// Persistencia en LocalStorage
+function saveGameState() {
+    try {
+        localStorage.setItem(SAVE_KEY, JSON.stringify(gameState));
+    } catch (e) {
+        console.warn('No se pudo guardar la partida:', e);
+    }
+}
 
-loadGameState = function() {
-    const saved = localStorage.getItem(GAME_STATE_KEY);
+function loadGameState() {
+    const saved = localStorage.getItem(SAVE_KEY);
     if (saved) {
         try {
-            gameState = JSON.parse(saved);
-        } catch(e) {}
+            const parsed = JSON.parse(saved);
+            gameState = Object.assign(gameState, parsed);
+        } catch (e) {
+            console.error('Error al cargar la partida:', e);
+        }
     }
-};
+}
 
-resetGameState = function() {
-    localStorage.removeItem(GAME_STATE_KEY);
+function resetGameState() {
+    localStorage.removeItem(SAVE_KEY);
     gameState = {
         currentRoom: 1,
-        maxUnlockedRoom: 1,
         inventory: [],
         selectedForCombine: [],
-        solvedPuzzles: { wordlock: false, circuit: false, safe: false, synth: false, valves: false },
-        placedCores: [false, false, false, false],
-        discoveredItems: []
+        placedCores: [false, false, false, false, false, false, false],
+        solvedPuzzles: {
+            wordlock: false,
+            circuit: false,
+            safe: false,
+            synth: false,
+            pipes: false,
+            codebreaker: false,
+            lights: false,
+            masterDoor: false
+        },
+        collectedHotspots: [],
+        codexFragments: ['?', '?', '?', '?', '?', '?', '?'],
+        timeElapsed: 0,
+        hintsUsed: 0,
+        gameStarted: false,
+        gameWon: false
     };
-};
+    circuitSwitches = [false, false, false, false];
+    currentSafeInput = '';
+    currentSynthInput = [];
+    pipeRotations = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+    currentMastermindGuess = ['🔴', '🔴', '🔴', '🔴'];
+    mastermindAttempts = 0;
+    masterWheelValues = [0, 0, 0, 0, 0, 0, 0];
+    initLightsGrid();
+}
