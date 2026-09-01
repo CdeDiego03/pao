@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>THE VAULT: Escape Room Gigante</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <main id="app-container">
+        
+        <!-- PANTALLA DE INICIO ARCADE -->
+        <section id="start-screen" class="screen active">
+            <div class="start-card">
+                <div class="cyber-badge">⚠️ MODO DESAFÍO ACTIVO ⚠️</div>
+                <h1 class="title">THE VAULT</h1>
+                <p class="subtitle">Estás atrapado en un complejo industrial de 6 sectores. Resuelve las pruebas, combina herramientas y desbloquea el núcleo para obtener tu regalo de cumpleaños.</p>
+                <div class="glitch-icon">⚙️⚡🔓</div>
+                <button id="btn-start" class="btn-cyber pulse">INICIAR ESCAPE ROOM</button>
+                <button id="btn-continue" class="btn-cyber-sec hidden">CONTINUAR PARTIDA</button>
+            </div>
+        </section>
+
+        <!-- PANTALLA DE JUEGO PRINCIPAL -->
+        <section id="game-screen" class="screen">
+            
+            <!-- HEADER CON NAVEGACIÓN Y MENÚ -->
+            <header id="game-header">
+                <div class="header-left">
+                    <span id="room-code-tag" class="room-tag">SEC-01</span>
+                    <span id="current-room-title" class="room-title">Taller de Control</span>
+                </div>
+                <div class="header-right">
+                    <button id="btn-map" class="header-btn" title="Minimapa">🗺️</button>
+                    <button id="btn-hint" class="header-btn" title="Pistas">💡</button>
+                    <button id="btn-save" class="header-btn" title="Guardar">💾</button>
+                    <button id="btn-reset" class="header-btn" title="Reiniciar">🔄</button>
+                </div>
+            </header>
+
+            <!-- VISTA DE ESCENARIOS (6 SALAS ILUSTRADAS) -->
+            <div id="stage-view">
+
+                <!-- SALA 1: TALLER DE CONTROL -->
+                <article id="room-1" class="room-view active" data-room-id="1">
+                    <div class="room-bg bg-sector-1">
+                        <div class="cyber-grid"></div>
+                        <div class="room-illustration">
+                            <div class="ill-workbench">🛠️</div>
+                            <div class="ill-terminal">🖥️</div>
+                            <div class="ill-chest">🧰</div>
+                        </div>
+                    </div>
+                    
+                    <button class="hotspot" style="top: 55%; left: 8%; width: 30%; height: 22%;" data-action="inspect-workbench">
+                        <span class="hotspot-sparkle"></span>
+                        <span class="hotspot-label">Mesa de Trabajo</span>
+                    </button>
+
+                    <button class="hotspot" style="top: 20%; left: 35%; width: 30%; height: 25%;" data-action="inspect-terminal">
+                        <span class="hotspot-sparkle"></span>
+                        <span class="hotspot-label">Terminal de Control</span>
+                    </button>
+
+                    <button class="hotspot" style="top: 62%; left: 65%; width: 28%; height: 24%;" data-action="open-chest-modal">
+                        <span class="hotspot-sparkle"></span>
+                        <span class="hotspot-label">Cofre de Acero</span>
+                    </button>
+
+                    <button class="hotspot" style="top: 84%; left: 38%; width: 25%; height: 12%;" data-action="inspect-panel-floor">
+                        <span class="hotspot-label">Tapa Suelta</span>
+                    </button>
+
+                    <button class="nav-arrow nav-right" data-target-room="2">➡️</button>
+                </article>
+
+                <!-- SALA 2: LABORATORIO ELECTRÓNICO -->
+                <article id="room-2" class="room-view" data-room-id="2">
+                    <div class="room-bg bg-sector-2">
+                        <div class="cyber-grid"></div>
+                        <div class="room-illustration">
+                            <div class="ill-circuit">⚡</div>
+                            <div class="ill-server">🎛️</div>
+                        </div>
+                    </div>
+
+                    <button class="hotspot" style="top: 28%; left: 10%; width: 36%; height: 32%;" data-action="open-circuit-modal">
+                        <span class="hotspot-sparkle"></span>
+                        <span class="hotspot-label">Cuadro de Circuitos</span>
+                    </button>
+
+                    <button class="hotspot" style="top: 52%; left: 55%; width: 35%; height: 32%;" data-action="inspect-server">
+                        <span class="hotspot-sparkle"></span>
+                        <span class="hotspot-label">Rack de Servidores</span>
+                    </button>
+
+                    <button class="nav-arrow nav-left" data-target-room="1">⬅️</button>
+                    <button class="nav-arrow nav-right" data-target-room="3">➡️</button>
+                </article>
+
+                <!-- SALA 3: ARCHIVO DE CIFRADOS -->
+                <article id="room-3" class="room-view" data-room-id="3">
+                    <div class="room-bg bg-sector-3">
+                        <div class="cyber-grid"></div>
+                        <div class="room-illustration">
+                            <div class="ill-archives">📚</div>
+                            <div class="ill-safe">🔐</div>
+                        </div>
+                    </div>
+
+                    <button class="hotspot" style="top: 18%; left: 12%; width: 34%; height: 52%;" data-action="inspect-archives">
+                        <span class="hotspot-sparkle"></span>
+                        <span class="hotspot-label">Estantes de Planos</span>
+                    </button>
+
+                    <button class="hotspot" style="top: 40%; left: 60%; width: 30%; height: 30%;" data-action="open-safe-modal">
+                        <span class="hotspot-sparkle"></span>
+                        <span class="hotspot-label">Caja Fuerte V3</span>
+                    </button>
+
+                    <button class="nav-arrow nav-left" data-target-room="2">⬅️</button>
+                    <button class="nav-arrow nav-right" data-target-room="4">➡️</button>
+                </article>
+
+                <!-- SALA 4: ESTUDIO ACÚSTICO -->
+                <article id="room-4" class="room-view" data-room-id="4">
+                    <div class="room-bg bg-sector-4">
+                        <div class="cyber-grid"></div>
+                        <div class="room-illustration">
+                            <div class="ill-synth">🎹</div>
+                            <div class="ill-speaker">🔊</div>
+                        </div>
+                    </div>
+
+                    <button class="hotspot" style="top: 48%; left: 22%; width: 55%; height: 32%;" data-action="open-synth-modal">
+                        <span class="hotspot-sparkle"></span>
+                        <span class="hotspot-label">Sintetizador Modular</span>
+                    </button>
+
+                    <button class="hotspot" style="top: 15%; left: 70%; width: 22%; height: 28%;" data-action="inspect-speakers">
+                        <span class="hotspot-label">Monitor de Audio</span>
+                    </button>
+
+                    <button class="nav-arrow nav-left" data-target-room="3">⬅️</button>
+                    <button class="nav-arrow nav-right" data-target-room="5">➡️</button>
+                </article>
+
+                <!-- SALA 5: PLANTA DE FLUIDOS Y HIDRÁULICA -->
+                <article id="room-5" class="room-view" data-room-id="5">
+                    <div class="room-bg bg-sector-5">
+                        <div class="cyber-grid"></div>
+                        <div class="room-illustration">
+                            <div class="ill-valves">🚰</div>
+                            <div class="ill-drain">🌀</div>
+                        </div>
+                    </div>
+
+                    <button class="hotspot" style="top: 28%; left: 18%; width: 64%; height: 38%;" data-action="open-valves-modal">
+                        <span class="hotspot-sparkle"></span>
+                        <span class="hotspot-label">Consola de Válvulas</span>
+                    </button>
+
+                    <button class="hotspot" style="top: 72%; left: 75%; width: 18%; height: 20%;" data-action="inspect-drain">
+                        <span class="hotspot-sparkle"></span>
+                        <span class="hotspot-label">Rejilla de Drenaje</span>
+                    </button>
+
+                    <button class="nav-arrow nav-left" data-target-room="4">⬅️</button>
+                    <button class="nav-arrow nav-right" data-target-room="6">➡️</button>
+                </article>
+
+                <!-- SALA 6: LA BÓVEDA NÚCLEO (FINAL) -->
+                <article id="room-6" class="room-view" data-room-id="6">
+                    <div class="room-bg bg-sector-6">
+                        <div class="cyber-grid"></div>
+                        <div class="room-illustration">
+                            <div class="ill-door">🚪</div>
+                        </div>
+                    </div>
+
+                    <div class="master-altar">
+                        <div class="altar-status" id="master-status">ESTADO: 0/4 NÚCLEOS INSTALADOS</div>
+                        <div class="slots-4grid">
+                            <button class="vault-slot" id="vslot-1" data-vslot="1">🔒</button>
+                            <button class="vault-slot" id="vslot-2" data-vslot="2">🔒</button>
+                            <button class="vault-slot" id="vslot-3" data-vslot="3">🔒</button>
+                            <button class="vault-slot" id="vslot-4" data-vslot="4">🔒</button>
+                        </div>
+                    </div>
+
+                    <button class="hotspot" style="top: 10%; left: 20%; width: 60%; height: 52%;" data-action="inspect-master-door">
+                        <span class="hotspot-sparkle"></span>
+                        <span class="hotspot-label">COMPUERTA BLINDADA PRINCIPAL</span>
+                    </button>
+
+                    <button class="nav-arrow nav-left" data-target-room="5">⬅️</button>
+                </article>
+
+            </div>
+
+            <!-- TERMINAL DE COMUNICACIÓN / TEXTO DE DIÁLOGOS -->
+            <div id="dialogue-box">
+                <div class="diag-header">⚡ TERMINAL DE DATOS:</div>
+                <p id="dialogue-text">Explora los sectores. Selecciona objetos de tu inventario para combinarlos o usarlos.</p>
+            </div>
+
+            <!-- BARRA DE INVENTARIO Y HERRAMIENTA DE COMBINACIÓN -->
+            <footer id="inventory-bar">
+                <div class="inventory-top">
+                    <span>INVENTARIO TÁCTICO (<span id="inv-count">0</span>/6)</span>
+                    <button id="btn-combine" class="btn-combine-action">⚡ COMBINAR (0)</button>
+                </div>
+                <div id="inventory-slots" class="inventory-slots">
+                    <div class="slot-item empty" data-slot="0"></div>
+                    <div class="slot-item empty" data-slot="1"></div>
+                    <div class="slot-item empty" data-slot="2"></div>
+                    <div class="slot-item empty" data-slot="3"></div>
+                    <div class="slot-item empty" data-slot="4"></div>
+                    <div class="slot-item empty" data-slot="5"></div>
+                </div>
+            </footer>
+        </section>
+
+        <!-- MODALES DE PUZLES AVANZADOS -->
+
+        <!-- MODAL: MAPA INTERACTIVO -->
+        <div id="modal-map" class="modal-overlay hidden">
+            <div class="modal-card">
+                <button class="modal-close-btn" data-close-modal>✖</button>
+                <h3>🗺️ NAVEGADOR DE SECTORES</h3>
+                <p class="modal-sub">Haz tap sobre un sector desbloqueado para viajar rápidamente:</p>
+                <div class="map-grid">
+                    <button class="map-node active" data-goto-room="1">SEC-01<br><small>Taller</small></button>
+                    <button class="map-node" id="mnode-2" data-goto-room="2">SEC-02<br><small>Circuito</small></button>
+                    <button class="map-node" id="mnode-3" data-goto-room="3">SEC-03<br><small>Archivo</small></button>
+                    <button class="map-node" id="mnode-4" data-goto-room="4">SEC-04<br><small>Audio</small></button>
+                    <button class="map-node" id="mnode-5" data-goto-room="5">SEC-05<br><small>Fluidos</small></button>
+                    <button class="map-node" id="mnode-6" data-goto-room="6">SEC-06<br><small>Núcleo</small></button>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL 1: CANDADO ALFANUMÉRICO (WORDLOCK) -->
+        <div id="modal-wordlock" class="modal-overlay hidden">
+            <div class="modal-card">
+                <button class="modal-close-btn" data-close-modal>✖</button>
+                <h3>🔐 CIERRE ALFANUMÉRICO</h3>
+                <p class="modal-sub">Introduce el código alfabético de 4 caracteres:</p>
+                <div class="wheels-container">
+                    <div class="wheel-col">
+                        <button class="wheel-arrow" data-wheel="0" data-dir="up">▲</button>
+                        <div class="wheel-val" id="wheel-0">A</div>
+                        <button class="wheel-arrow" data-wheel="0" data-dir="down">▼</button>
+                    </div>
+                    <div class="wheel-col">
+                        <button class="wheel-arrow" data-wheel="1" data-dir="up">▲</button>
+                        <div class="wheel-val" id="wheel-1">A</div>
+                        <button class="wheel-arrow" data-wheel="1" data-dir="down">▼</button>
+                    </div>
+                    <div class="wheel-col">
+                        <button class="wheel-arrow" data-wheel="2" data-dir="up">▲</button>
+                        <div class="wheel-val" id="wheel-2">A</div>
+                        <button class="wheel-arrow" data-wheel="2" data-dir="down">▼</button>
+                    </div>
+                    <div class="wheel-col">
+                        <button class="wheel-arrow" data-wheel="3" data-dir="up">▲</button>
+                        <div class="wheel-val" id="wheel-3">A</div>
+                        <button class="wheel-arrow" data-wheel="3" data-dir="down">▼</button>
+                    </div>
+                </div>
+                <button id="btn-check-wordlock" class="btn-cyber">VERIFICAR CÓDIGO</button>
+            </div>
+        </div>
+
+        <!-- MODAL 2: PUZLE DE CABLES / CIRCUITOS -->
+        <div id="modal-circuit" class="modal-overlay hidden">
+            <div class="modal-card">
+                <button class="modal-close-btn" data-close-modal>✖</button>
+                <h3>⚡ PUENTE DE CIRCUITOS</h3>
+                <p class="modal-sub">Enciende los 3 interruptores para alcanzar los 240V necesarios:</p>
+                <div class="circuit-board">
+                    <div class="wire-row">
+                        <span>LÍNEA ALPHA (+80V):</span>
+                        <button class="switch-btn" id="sw-0" data-sw="0">OFF</button>
+                    </div>
+                    <div class="wire-row">
+                        <span>LÍNEA BETA (+80V):</span>
+                        <button class="switch-btn" id="sw-1" data-sw="1">OFF</button>
+                    </div>
+                    <div class="wire-row">
+                        <span>LÍNEA GAMMA (+80V):</span>
+                        <button class="switch-btn" id="sw-2" data-sw="2">OFF</button>
+                    </div>
+                </div>
+                <div id="circuit-voltage" class="voltage-meter">VOLTAJE: 0V / 240V</div>
+                <button id="btn-check-circuit" class="btn-cyber" style="margin-top: 15px;">ACTIVAR PUENTE</button>
+            </div>
+        </div>
+
+        <!-- MODAL 3: CAJA FUERTE CON RETARDO -->
+        <div id="modal-safe" class="modal-overlay hidden">
+            <div class="modal-card">
+                <button class="modal-close-btn" data-close-modal>✖</button>
+                <h3>🔢 TECLADO DE SEGURIDAD</h3>
+                <p class="modal-sub">Introduce la clave numérica de 4 dígitos:</p>
+                <div class="keypad-display" id="safe-display">____</div>
+                <div class="keypad-grid">
+                    <button class="key-btn" data-key="1">1</button>
+                    <button class="key-btn" data-key="2">2</button>
+                    <button class="key-btn" data-key="3">3</button>
+                    <button class="key-btn" data-key="4">4</button>
+                    <button class="key-btn" data-key="5">5</button>
+                    <button class="key-btn" data-key="6">6</button>
+                    <button class="key-btn" data-key="7">7</button>
+                    <button class="key-btn" data-key="8">8</button>
+                    <button class="key-btn" data-key="9">9</button>
+                    <button class="key-btn key-action" data-key="C">C</button>
+                    <button class="key-btn" data-key="0">0</button>
+                    <button class="key-btn key-ok" data-key="OK">OK</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL 4: SINTETIZADOR MODULAR DE MÚSICA -->
+        <div id="modal-synth" class="modal-overlay hidden">
+            <div class="modal-card">
+                <button class="modal-close-btn" data-close-modal>✖</button>
+                <h3>🎹 SINTETIZADOR MODULAR</h3>
+                <p class="modal-sub">Reproduce la secuencia armónica exacta de 4 notas:</p>
+                <div id="synth-history" class="synth-history">SECUENCIA: <span>----</span></div>
+                <div class="synth-keyboard">
+                    <button class="synth-key" data-note="DO">DO</button>
+                    <button class="synth-key" data-note="RE">RE</button>
+                    <button class="synth-key" data-note="MI">MI</button>
+                    <button class="synth-key" data-note="FA">FA</button>
+                    <button class="synth-key" data-note="SOL">SOL</button>
+                    <button class="synth-key" data-note="LA">LA</button>
+                    <button class="synth-key" data-note="SI">SI</button>
+                </div>
+                <button id="btn-reset-synth" class="btn-cyber-sec" style="margin-top: 12px;">BORRAR ENTRADA</button>
+            </div>
+        </div>
+
+        <!-- MODAL 5: PUZLE DE VÁLVULAS DE PRESIÓN -->
+        <div id="modal-valves" class="modal-overlay hidden">
+            <div class="modal-card">
+                <button class="modal-close-btn" data-close-modal>✖</button>
+                <h3>🚰 CONTROL DE VÁLVULAS</h3>
+                <p class="modal-sub">Ajusta los 3 manómetros a los valores requeridos:</p>
+                <div class="valves-flex">
+                    <div class="valve-box">
+                        <span>V1</span>
+                        <button class="btn-valve" data-valve="0">▲</button>
+                        <div class="valve-val" id="valve-0">0</div>
+                    </div>
+                    <div class="valve-box">
+                        <span>V2</span>
+                        <button class="btn-valve" data-valve="1">▲</button>
+                        <div class="valve-val" id="valve-1">0</div>
+                    </div>
+                    <div class="valve-box">
+                        <span>V3</span>
+                        <button class="btn-valve" data-valve="2">▲</button>
+                        <div class="valve-val" id="valve-2">0</div>
+                    </div>
+                </div>
+                <button id="btn-check-valves" class="btn-cyber" style="margin-top: 15px;">IGUALAR PRESIÓN</button>
+            </div>
+        </div>
+
+        <!-- MODAL DE INSPECCIÓN Y PISTAS -->
+        <div id="modal-inspect" class="modal-overlay hidden">
+            <div class="modal-card">
+                <button class="modal-close-btn" data-close-modal>✖</button>
+                <h3 id="inspect-title">OBJETO</h3>
+                <div id="inspect-icon" class="inspect-icon">🔍</div>
+                <p id="inspect-text" class="modal-sub"></p>
+                <button id="btn-collect-item" class="btn-cyber hidden">GUARDAR EN INVENTARIO</button>
+            </div>
+        </div>
+
+        <div id="modal-hints" class="modal-overlay hidden">
+            <div class="modal-card">
+                <button class="modal-close-btn" data-close-modal>✖</button>
+                <h3>💡 BASE DE DATOS DE PISTAS</h3>
+                <div id="hints-list" class="hints-list"></div>
+            </div>
+        </div>
+
+        <!-- PANTALLA FINAL DE VICTORIA Y REGALO -->
+        <div id="modal-victory" class="modal-overlay victory-overlay hidden">
+            <div class="victory-card">
+                <div class="victory-header">
+                    <h2>🏆 COMPLEJO DESBLOQUEADO 🏆</h2>
+                    <p class="victory-sub">¡Has superado los 6 sectores de puzles!</p>
+                </div>
+
+                <div class="photo-frame-wrapper">
+                    <div class="photo-frame">
+                        <img id="victory-photo" src="assets/nuestra-foto.jpg" alt="Foto Recompensa" onerror="this.src='https://images.unsplash.com/photo-1518199266791-5375a83190b7?auto=format&fit=crop&w=600&q=80'">
+                        <div class="star-badge">👑</div>
+                    </div>
+                </div>
+
+                <div class="message-box">
+                    <p>¡Victoria impecable! Has demostrado una capacidad brutal para resolver puzles complejos. Como recompensa por completar el juego, aquí tienes la canción exclusiva creada para ti por tu cumpleaños.</p>
+                </div>
+
+                <div class="audio-player-container">
+                    <div class="audio-title">🎧 Canción de Cumpleaños</div>
+                    <audio id="audio-element" controls controlsList="nodownload">
+                        <source src="assets/cancion.mp3" type="audio/mpeg">
+                        Tu navegador no soporta reproducción de audio.
+                    </audio>
+                </div>
+
+                <a id="download-link" href="assets/cancion.mp3" download="Cancion_Cumpleanos.mp3" class="btn-download">
+                    <span>📥</span> Descargar Canción MP3
+                </a>
+
+                <button id="btn-restart-game" class="btn-cyber-sec" style="margin-top: 15px;">Reiniciar Partida</button>
+            </div>
+        </div>
+
+    </main>
+
+    <script src="script.js"></script>
+</body>
+</html>
