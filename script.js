@@ -1,14 +1,18 @@
 /**
  * THE VAULT: ESCAPE ROOM INTERACTIVO (8 SECTORES)
- * Motor de Juego: Inventario Infinito con Desplazamiento Horizontal (Scroll Táctil),
- * Inventario Inteligente (Inspección/Lectura y Combinación), Toast Singleton Antispam,
- * Puzles 100% Solubles y Navegación Libre.
+ * Motor de Juego Completo:
+ * - Selección manual de objetos del inventario para desbloquear puzles y altares
+ * - Inventario infinito y deslizable horizontalmente (Swipe / Touch scroll)
+ * - Inventario inteligente (Lectura de documentos vs Selección de ingredientes)
+ * - Notificaciones HUD Toast Singleton Antispam (no saturan ni tapan controles)
+ * - Puzles 100% matemáticamente solubles (Lights Out y Tuberías corregidos)
+ * - Exploración y navegación libre de salas 1 a 8 desde el inicio
  */
 
 // ==========================================
 // 1. CONSTANTES, AUDIO Y ESTADO GLOBAL
 // ==========================================
-const SAVE_KEY = 'THE_VAULT_SAVE_DATA_V10';
+const SAVE_KEY = 'THE_VAULT_SAVE_DATA_V11';
 
 // Sistema de Audio Sintetizado (Web Audio API)
 class SoundFX {
@@ -110,17 +114,17 @@ const ITEMS = {
     'llave_valvula': { 
         name: 'Llave de Válvula', 
         icon: '🗝️', 
-        desc: 'Herramienta de acero para desbloquear pasos de fluido.' 
+        desc: 'Herramienta de acero para desbloquear pasos mecánicos de fluido.' 
     },
     'refrigerante_criogenico': { 
         name: 'Cápsula de Refrigerante', 
         icon: '🧪', 
-        desc: 'Cilindro térmico presurizado con nitrógeno líquido.' 
+        desc: 'Cilindro térmico presurizado con nitrógeno líquido a -196°C.' 
     },
     'chip_vigilancia': { 
         name: 'Chip Desencriptador', 
         icon: '💾', 
-        desc: 'Módulo electrónico con firmware de desencriptación.' 
+        desc: 'Módulo electrónico con firmware de desencriptación de protocolos.' 
     },
     'fusible_alta_tension': { 
         name: 'Fusible Crítico', 
@@ -175,6 +179,13 @@ let gameState = {
     inventory: [],
     selectedForCombine: [],
     placedCores: [false, false, false, false, false, false, false],
+    unlockedDevices: {
+        circuit: false,
+        synth: false,
+        pipes: false,
+        codebreaker: false,
+        lights: false
+    },
     solvedPuzzles: {
         wordlock: false,
         circuit: false,
@@ -206,6 +217,7 @@ let mastermindAttempts = 0;
 let lightsGridState = Array(16).fill(false);
 let masterWheelValues = [0, 0, 0, 0, 0, 0, 0];
 let pendingInspectItem = null;
+let currentItemSelectionTarget = null;
 let gameTimerInterval = null;
 
 // ==========================================
@@ -215,6 +227,7 @@ document.addEventListener('DOMContentLoaded', () => {
     checkSavedGame();
     initLightsGrid();
     setupEventListeners();
+    ensureItemSelectionModalExists();
 });
 
 function checkSavedGame() {
@@ -314,7 +327,7 @@ function setupEventListeners() {
         });
     }
 
-    // Navegación libre por flechas (todas las salas 1-8 desbloqueadas de inicio)
+    // Navegación libre por flechas (todas las salas 1-8 desbloqueadas)
     document.querySelectorAll('.nav-arrow').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const target = parseInt(e.currentTarget.dataset.targetRoom, 10);
@@ -583,7 +596,220 @@ function closeAllModals() {
 }
 
 // ==========================================
-// 4. AMBIENTACIÓN PURA (SIN SPOILERS EN TEXTO)
+// 4. MODAL DINÁMICO DE SELECCIÓN DE OBJETOS
+// ==========================================
+function ensureItemSelectionModalExists() {
+    if (document.getElementById('modal-select-item')) return;
+
+    const modal = document.createElement('div');
+    modal.id = 'modal-select-item';
+    modal.className = 'modal-overlay hidden';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+
+    modal.innerHTML = `
+        <div class="modal-card">
+            <button class="modal-close-btn" id="btn-close-select-modal" aria-label="Cerrar">✖</button>
+            <h3 id="select-modal-title">🔒 Mecanismo bloqueado</h3>
+            <p id="select-modal-desc" class="modal-sub"></p>
+            <div id="select-modal-list" style="display: flex; flex-direction: column; gap: 8px; margin: 16px 0; max-height: 250px; overflow-y: auto; padding-right: 4px;"></div>
+            <button id="btn-cancel-select-modal" class="btn-cyber-sec" style="margin-top: 8px;">Cancelar</button>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    document.getElementById('btn-close-select-modal').onclick = () => {
+        sfx.click();
+        modal.classList.add('hidden');
+    };
+    document.getElementById('btn-cancel-select-modal').onclick = () => {
+        sfx.click();
+        modal.classList.add('hidden');
+    };
+}
+
+function openItemSelectionModal(title, desc, targetKey) {
+    ensureItemSelectionModalExists();
+    currentItemSelectionTarget = targetKey;
+
+    document.getElementById('select-modal-title').textContent = title;
+    document.getElementById('select-modal-desc').textContent = desc;
+
+    const listContainer = document.getElementById('select-modal-list');
+    listContainer.innerHTML = '';
+
+    if (gameState.inventory.length === 0) {
+        listContainer.innerHTML = `
+            <div style="background: rgba(255,255,255,0.03); border: 1px dashed rgba(255,255,255,0.15); border-radius: 8px; padding: 16px; color: var(--text-muted);">
+                ⚠️ No llevas ningún objeto en tu inventario táctico. Explora las instalaciones para encontrar herramientas y componentes.
+            </div>
+        `;
+    } else {
+        gameState.inventory.forEach(itemId => {
+            const item = ITEMS[itemId];
+            if (!item) return;
+
+            const btn = document.createElement('button');
+            btn.className = 'select-item-choice-btn';
+            btn.style.cssText = `
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                width: 100%;
+                padding: 10px 12px;
+                border-radius: 8px;
+                border: 1px solid var(--border-glow, rgba(0, 243, 255, 0.3));
+                background: rgba(0, 243, 255, 0.05);
+                color: #ffffff;
+                font-family: var(--font-ui, 'Rajdhani', sans-serif);
+                font-size: 14px;
+                font-weight: 700;
+                cursor: pointer;
+                text-align: left;
+                transition: background 0.15s, border-color 0.15s, transform 0.1s;
+            `;
+
+            btn.onmouseenter = () => {
+                btn.style.background = 'rgba(0, 243, 255, 0.16)';
+                btn.style.borderColor = 'var(--neon-cyan, #00f3ff)';
+            };
+            btn.onmouseleave = () => {
+                btn.style.background = 'rgba(0, 243, 255, 0.05)';
+                btn.style.borderColor = 'var(--border-glow, rgba(0, 243, 255, 0.3))';
+            };
+
+            btn.innerHTML = `
+                <span style="font-size: 22px;">${item.icon}</span>
+                <span style="flex: 1;">${item.name}</span>
+            `;
+
+            btn.onclick = () => {
+                handleItemUsage(targetKey, itemId);
+            };
+
+            listContainer.appendChild(btn);
+        });
+    }
+
+    openModal('modal-select-item');
+}
+
+function handleItemUsage(targetKey, chosenItemId) {
+    const selectModal = document.getElementById('modal-select-item');
+
+    // 1. CUADRO DE CIRCUITOS (SEC-02)
+    if (targetKey === 'circuit') {
+        if (chosenItemId === 'cable_reparado') {
+            sfx.success();
+            removeItemFromInventory('cable_reparado');
+            gameState.unlockedDevices.circuit = true;
+            saveGameState();
+            selectModal.classList.add('hidden');
+            showDialogue('⚡ ¡Has conectado el Cable Aislado! Los relés reciben corriente. Cuadro activado.');
+            openModal('modal-circuit');
+        } else {
+            sfx.error();
+            showDialogue('❌ Ese objeto no sirve para cerrar el circuito ni conducir corriente en los relés.');
+        }
+    }
+
+    // 2. SINTETIZADOR MODULAR (SEC-04)
+    else if (targetKey === 'synth') {
+        if (chosenItemId === 'partitura_digital') {
+            sfx.success();
+            gameState.unlockedDevices.synth = true;
+            saveGameState();
+            selectModal.classList.add('hidden');
+            showDialogue('📜 ¡Partitura Digital cargada en la memoria del sintetizador! Listo para afinarse.');
+            openModal('modal-synth');
+        } else {
+            sfx.error();
+            showDialogue('❌ Ese objeto no contiene datos acústicos ni frecuencias musicales.');
+        }
+    }
+
+    // 3. CONSOLA DE TUBERÍAS (SEC-05)
+    else if (targetKey === 'pipes') {
+        if (chosenItemId === 'llave_valvula') {
+            sfx.success();
+            removeItemFromInventory('llave_valvula');
+            gameState.unlockedDevices.pipes = true;
+            saveGameState();
+            selectModal.classList.add('hidden');
+            showDialogue('🌀 ¡Has girado la Llave de Válvula! El cerrojo hidráulico se libera.');
+            openModal('modal-pipes');
+        } else {
+            sfx.error();
+            showDialogue('❌ Ese objeto no encaja en la rosca de la válvula maestra.');
+        }
+    }
+
+    // 4. CONSOLA DE VIGILANCIA (SEC-06)
+    else if (targetKey === 'codebreaker') {
+        if (chosenItemId === 'chip_vigilancia') {
+            sfx.success();
+            removeItemFromInventory('chip_vigilancia');
+            gameState.unlockedDevices.codebreaker = true;
+            saveGameState();
+            selectModal.classList.add('hidden');
+            showDialogue('💾 ¡Chip Desencriptador insertado! Terminal desbloqueada para descifrar.');
+            openModal('modal-codebreaker');
+        } else {
+            sfx.error();
+            showDialogue('❌ Ese objeto no es compatible con el puerto de datos de la consola.');
+        }
+    }
+
+    // 5. MATRIZ DE SOPORTE VITAL (SEC-07)
+    else if (targetKey === 'lights') {
+        if (chosenItemId === 'refrigerante_criogenico') {
+            sfx.success();
+            removeItemFromInventory('refrigerante_criogenico');
+            gameState.unlockedDevices.lights = true;
+            saveGameState();
+            selectModal.classList.add('hidden');
+            showDialogue('❄️ ¡Cápsula de Refrigerante inyectada! Los reguladores bajan a 0°C.');
+            openModal('modal-lightsgrid');
+        } else {
+            sfx.error();
+            showDialogue('❌ Ese objeto no tiene propiedades térmicas para enfriar los generadores.');
+        }
+    }
+
+    // 6. ALTARES DE LA BÓVEDA (SEC-08)
+    else if (targetKey.startsWith('altar_')) {
+        const slotIdx = parseInt(targetKey.split('_')[1], 10);
+        const expectedCore = `core_${slotIdx + 1}`;
+
+        if (chosenItemId === expectedCore) {
+            sfx.success();
+            removeItemFromInventory(chosenItemId);
+            gameState.placedCores[slotIdx] = true;
+            updateVaultSlotsUI();
+            saveGameState();
+            selectModal.classList.add('hidden');
+
+            const total = gameState.placedCores.filter(Boolean).length;
+            showDialogue(`⚡ ¡Has encajado el ${ITEMS[chosenItemId].name} en el Altar ${slotIdx + 1}! (${total}/7 instalados).`);
+
+            if (total === 7) {
+                setTimeout(() => {
+                    showDialogue('🌟 ¡Los 7 núcleos de energía están en sus puestos! La compuerta blindada principal está lista para ser descifrada.');
+                }, 1200);
+            }
+        } else if (chosenItemId.startsWith('core_')) {
+            sfx.error();
+            showDialogue(`❌ Este núcleo resuena en otra frecuencia. No corresponde al Altar ${slotIdx + 1}.`);
+        } else {
+            sfx.error();
+            showDialogue('❌ Ese objeto no es un núcleo de energía.');
+        }
+    }
+}
+
+// ==========================================
+// 5. AMBIENTACIÓN PURA (SIN SPOILERS EN TEXTO)
 // ==========================================
 function handleHotspot(action) {
     switch (action) {
@@ -628,8 +854,14 @@ function handleHotspot(action) {
         case 'open-circuit-modal':
             if (gameState.solvedPuzzles.circuit) {
                 showDialogue('⚡ El puente de relés ya está energizado.');
-            } else {
+            } else if (gameState.unlockedDevices.circuit) {
                 openModal('modal-circuit');
+            } else {
+                openItemSelectionModal(
+                    '⚡ Cuadro de Circuitos',
+                    'Los relés están abiertos y sin puente conductor. Selecciona un objeto de tu inventario para puentearlos:',
+                    'circuit'
+                );
             }
             break;
 
@@ -668,10 +900,16 @@ function handleHotspot(action) {
         case 'open-synth-modal':
             if (gameState.solvedPuzzles.synth) {
                 showDialogue('🎹 El sintetizador modular ya está calibrado.');
-            } else {
+            } else if (gameState.unlockedDevices.synth) {
                 currentSynthInput = [];
                 updateSynthDisplay();
                 openModal('modal-synth');
+            } else {
+                openItemSelectionModal(
+                    '🎹 Sintetizador Modular',
+                    'La memoria de frecuencias tonales está vacía. Selecciona un objeto para cargar las notas:',
+                    'synth'
+                );
             }
             break;
 
@@ -691,8 +929,14 @@ function handleHotspot(action) {
         case 'open-pipes-modal':
             if (gameState.solvedPuzzles.pipes) {
                 showDialogue('🔧 El circuito de fluidos ya está en funcionamiento.');
-            } else {
+            } else if (gameState.unlockedDevices.pipes) {
                 openModal('modal-pipes');
+            } else {
+                openItemSelectionModal(
+                    '🔧 Consola de Tuberías',
+                    'La válvula principal está trabada por un cerrojo de seguridad. Selecciona un objeto para desbloquearla:',
+                    'pipes'
+                );
             }
             break;
 
@@ -712,8 +956,14 @@ function handleHotspot(action) {
         case 'open-codebreaker-modal':
             if (gameState.solvedPuzzles.codebreaker) {
                 showDialogue('🛰️ La consola de vigilancia ya ha sido desbloqueada.');
-            } else {
+            } else if (gameState.unlockedDevices.codebreaker) {
                 openModal('modal-codebreaker');
+            } else {
+                openItemSelectionModal(
+                    '🛰️ Consola de Vigilancia',
+                    'Terminal bloqueada por protocolo de cifrado. Selecciona un objeto para desencriptar el acceso:',
+                    'codebreaker'
+                );
             }
             break;
 
@@ -729,8 +979,14 @@ function handleHotspot(action) {
         case 'open-lightsgrid-modal':
             if (gameState.solvedPuzzles.lights) {
                 showDialogue('❄️ La matriz de soporte vital está completamente encendida.');
-            } else {
+            } else if (gameState.unlockedDevices.lights) {
                 openModal('modal-lightsgrid');
+            } else {
+                openItemSelectionModal(
+                    '🚨 Matriz de Emergencia',
+                    'Alerta térmica: Los generadores de soporte vital están sobrecalentados. Selecciona un objeto para enfriarlos:',
+                    'lights'
+                );
             }
             break;
 
@@ -751,14 +1007,13 @@ function handleHotspot(action) {
 }
 
 // ==========================================
-// 5. INVENTARIO INFINITO Y DESLIZABLE (SWIPE / SCROLL)
+// 6. INVENTARIO INFINITO, DESLIZABLE E INTELIGENTE
 // ==========================================
 function isItemCombinable(itemId) {
     return RECIPES.some(r => r.ingredients.includes(itemId));
 }
 
 function addItemToInventory(itemId) {
-    // Sin límite de capacidad (inventario infinito y deslizable)
     if (!gameState.inventory.includes(itemId)) {
         gameState.inventory.push(itemId);
         if (!gameState.collectedHotspots.includes(itemId)) {
@@ -787,14 +1042,13 @@ function updateInventoryUI() {
     const container = document.getElementById('inventory-slots');
     const topLabel = document.querySelector('.inventory-top span');
     
-    // Actualizar cabecera del inventario (mostrando cantidad total dinámica)
     if (topLabel) {
         topLabel.innerHTML = `Inventario táctico (<span id="inv-count">${gameState.inventory.length}</span>)`;
     }
 
     if (!container) return;
 
-    // Configurar estilos para scroll/deslizamiento horizontal infinito
+    // Desplazamiento horizontal fluido
     container.style.display = 'flex';
     container.style.flexWrap = 'nowrap';
     container.style.overflowX = 'auto';
@@ -806,7 +1060,7 @@ function updateInventoryUI() {
 
     container.innerHTML = '';
 
-    // Renderizar todos los objetos que posee el jugador
+    // Renderizar ítems que posee el jugador
     gameState.inventory.forEach(itemId => {
         const item = ITEMS[itemId];
         if (!item) return;
@@ -825,7 +1079,7 @@ function updateInventoryUI() {
         slot.textContent = item.icon;
         slot.title = item.name;
 
-        // Si es combinable (cable, conector) se selecciona; si es pergamino/núcleo/etc se abre para leer
+        // Si es combinable (cable, conector) se selecciona; si es pergamino/documento/núcleo se abre para leer
         slot.onclick = () => {
             if (isItemCombinable(itemId)) {
                 toggleSelectForCombine(itemId);
@@ -838,7 +1092,7 @@ function updateInventoryUI() {
         container.appendChild(slot);
     });
 
-    // Añadir huecos vacíos mínimos para estética de barra
+    // Huecos vacíos mínimos para balance visual
     const minVisibleSlots = 8;
     const emptySlotsNeeded = Math.max(0, minVisibleSlots - gameState.inventory.length);
     for (let i = 0; i < emptySlotsNeeded; i++) {
@@ -950,7 +1204,7 @@ function unlockFragment(index, char) {
 }
 
 // ==========================================
-// 6. BITÁCORA Y PISTAS (SÓLO AQUÍ ARRIBA)
+// 7. BITÁCORA Y PISTAS (SÓLO AQUÍ ARRIBA)
 // ==========================================
 function renderHintsAndCodex() {
     const list = document.getElementById('hints-list');
@@ -960,27 +1214,27 @@ function renderHintsAndCodex() {
         hints.push('🔍 SEC-01 (Taller): La clave de 4 letras del cofre está anotada en la taquilla de emergencia de Criogenia (SEC-07).');
     }
     if (!gameState.solvedPuzzles.circuit) {
-        hints.push('🔍 SEC-02 (Laboratorio): Combina el Cable (SEC-01) y el Conector (SEC-03). El orden de los relés está en los monitores de Vigilancia (SEC-06).');
+        hints.push('🔍 SEC-02 (Laboratorio): Cuadro eléctrico sin puente. Combina el Cable (SEC-01) y el Conector (SEC-03) y úsalo para energizarlo. El orden de los relés está en Vigilancia (SEC-06).');
     }
     if (!gameState.solvedPuzzles.safe) {
         hints.push('🔍 SEC-03 (Archivo): El código numérico de 4 dígitos de la caja fuerte está en una etiqueta del servidor en el Laboratorio (SEC-02).');
     }
     if (!gameState.solvedPuzzles.synth) {
-        hints.push('🔍 SEC-04 (Estudio): Abre la caja fuerte (SEC-03) para conseguir la Partitura Digital e introduce las notas indicadas en la terminal de SEC-01.');
+        hints.push('🔍 SEC-04 (Estudio): Carga la Partitura Digital (SEC-03) en el sintetizador y reproduce las notas indicadas en la terminal de SEC-01.');
     }
     if (!gameState.solvedPuzzles.pipes) {
-        hints.push('🔍 SEC-05 (Fluidos): Necesitas la Llave de Válvula (SEC-04). Gira las tuberías perimetrales siguiendo el plano del panel de SEC-02.');
+        hints.push('🔍 SEC-05 (Fluidos): Usa la Llave de Válvula (SEC-04) para desbloquear la consola y gira las tuberías perimetrales según el plano de SEC-02.');
     }
     if (!gameState.solvedPuzzles.codebreaker) {
-        hints.push('🔍 SEC-06 (Vigilancia): Necesitas el Chip Desencriptador (SEC-05). La combinación de 4 colores está en la pizarra de SEC-01.');
+        hints.push('🔍 SEC-06 (Vigilancia): Usa el Chip Desencriptador (SEC-05) para acceder a la terminal e introduce los colores de la pizarra de SEC-01.');
     }
     if (!gameState.solvedPuzzles.lights) {
-        hints.push('🔍 SEC-07 (Criogenia): Requiere el Refrigerante (SEC-05) y el Fusible (SEC-06). Conmuta las celdas hasta que las 16 luces queden encendidas.');
+        hints.push('🔍 SEC-07 (Criogenia): Usa el Refrigerante (SEC-05) para enfriar los generadores de la matriz y enciende las 16 luces.');
     }
     
     const placedCoresCount = gameState.placedCores.filter(Boolean).length;
     if (placedCoresCount < 7) {
-        hints.push(`🔍 SEC-08 (Bóveda): Coloca los 7 núcleos en el altar (${placedCoresCount}/7 instalados).`);
+        hints.push(`🔍 SEC-08 (Bóveda): Selecciona y coloca cada uno de los 7 núcleos en su altar correspondiente (${placedCoresCount}/7 instalados).`);
     } else if (!gameState.solvedPuzzles.masterDoor) {
         hints.push('🔍 SEC-08 (Bóveda): Todos los núcleos instalados. Introduce el código de 7 dígitos reunido de cada sector.');
     }
@@ -1005,7 +1259,7 @@ function renderHintsAndCodex() {
 }
 
 // ==========================================
-// 7. LÓGICA DE PUZLES (CORREGIDOS Y 100% SOLUCIONABLES)
+// 8. LÓGICA DE PUZLES
 // ==========================================
 
 // --- PUZLE 1: WORDLOCK (SEC-01) ---
@@ -1066,17 +1320,10 @@ function setupCircuitListeners() {
     const checkBtn = document.getElementById('btn-check-circuit');
     if (checkBtn) {
         checkBtn.addEventListener('click', () => {
-            if (!hasItem('cable_reparado')) {
-                sfx.error();
-                showDialogue('⚠️ Falta un conductor aislado para cerrar el puente de relés.');
-                return;
-            }
-
             const isMatch = circuitSwitches.every((val, i) => val === PUZZLE_SOLUTIONS.circuitSwitches[i]);
             if (isMatch) {
                 sfx.success();
                 gameState.solvedPuzzles.circuit = true;
-                removeItemFromInventory('cable_reparado');
                 unlockFragment(1, '4');
                 closeAllModals();
                 addItemToInventory('core_2');
@@ -1195,14 +1442,6 @@ function updateSynthDisplay() {
 }
 
 function checkSynthSolution() {
-    if (!hasItem('partitura_digital') && !gameState.solvedPuzzles.safe) {
-        sfx.error();
-        showDialogue('⚠️ El sintetizador no responde sin una referencia armónica cargada.');
-        currentSynthInput = [];
-        updateSynthDisplay();
-        return;
-    }
-
     const isOk = currentSynthInput.every((n, i) => n === PUZZLE_SOLUTIONS.synthSequence[i]);
     if (isOk) {
         sfx.success();
@@ -1239,12 +1478,6 @@ function setupPipesListeners() {
     const checkBtn = document.getElementById('btn-check-pipes');
     if (checkBtn) {
         checkBtn.addEventListener('click', () => {
-            if (!hasItem('llave_valvula')) {
-                sfx.error();
-                showDialogue('⚠️ La consola de flujo está trabada mecánicamente.');
-                return;
-            }
-
             const r1 = pipeRotations[1];
             const r2 = pipeRotations[2];
             const r5 = pipeRotations[5];
@@ -1254,7 +1487,6 @@ function setupPipesListeners() {
             if (isComplete) {
                 sfx.success();
                 gameState.solvedPuzzles.pipes = true;
-                removeItemFromInventory('llave_valvula');
                 unlockFragment(4, '6');
                 if (statusEl) statusEl.textContent = 'ESTADO: FLUJO CONECTADO (100%)';
                 closeAllModals();
@@ -1289,12 +1521,6 @@ function setupCodebreakerListeners() {
     const submitBtn = document.getElementById('btn-submit-guess');
     if (submitBtn) {
         submitBtn.addEventListener('click', () => {
-            if (!hasItem('chip_vigilancia') && !gameState.solvedPuzzles.pipes) {
-                sfx.error();
-                showDialogue('⚠️ Consola bloqueada por falta de chip desencriptador.');
-                return;
-            }
-
             mastermindAttempts++;
             sfx.click();
             const target = PUZZLE_SOLUTIONS.codebreakerSequence;
@@ -1339,7 +1565,6 @@ function setupCodebreakerListeners() {
             if (exact === 4) {
                 sfx.success();
                 gameState.solvedPuzzles.codebreaker = true;
-                if (hasItem('chip_vigilancia')) removeItemFromInventory('chip_vigilancia');
                 unlockFragment(5, '1');
                 closeAllModals();
                 addItemToInventory('core_6');
@@ -1389,12 +1614,6 @@ function setupLightsGridListeners() {
 }
 
 function toggleLightCellAndNeighbors(idx) {
-    if (!hasItem('refrigerante_criogenico') && !gameState.collectedHotspots.includes('refrigerante_criogenico')) {
-        sfx.error();
-        showDialogue('⚠️ Alerta de temperatura crítica en la matriz.');
-        return;
-    }
-
     sfx.click();
     const row = Math.floor(idx / 4);
     const col = idx % 4;
@@ -1417,7 +1636,6 @@ function toggleLightCellAndNeighbors(idx) {
     if (lightsGridState.every(Boolean)) {
         sfx.success();
         gameState.solvedPuzzles.lights = true;
-        if (hasItem('refrigerante_criogenico')) removeItemFromInventory('refrigerante_criogenico');
         unlockFragment(6, '8');
         closeAllModals();
         addItemToInventory('core_7');
@@ -1441,23 +1659,11 @@ function handleVaultSlotPlacement(slotIndex) {
         return;
     }
 
-    const coreKey = `core_${slotIndex + 1}`;
-    if (hasItem(coreKey)) {
-        sfx.success();
-        removeItemFromInventory(coreKey);
-        gameState.placedCores[slotIndex] = true;
-        updateVaultSlotsUI();
-        const total = gameState.placedCores.filter(Boolean).length;
-        showDialogue(`⚡ ${ITEMS[coreKey].name} fijado (${total}/7 instalados).`);
-        saveGameState();
-
-        if (total === 7) {
-            showDialogue('🌟 Los 7 núcleos de energía están fijados.');
-        }
-    } else {
-        sfx.error();
-        showDialogue(`Se requiere "${ITEMS[coreKey].name}" en el inventario.`);
-    }
+    openItemSelectionModal(
+        `⚡ Altar Receptáculo 0${slotIndex + 1}`,
+        `Pedestal de energía vacío. Selecciona el núcleo de tu inventario que deseas encajar aquí:`,
+        `altar_${slotIndex}`
+    );
 }
 
 function updateVaultSlotsUI() {
@@ -1580,6 +1786,13 @@ function resetGameState() {
         inventory: [],
         selectedForCombine: [],
         placedCores: [false, false, false, false, false, false, false],
+        unlockedDevices: {
+            circuit: false,
+            synth: false,
+            pipes: false,
+            codebreaker: false,
+            lights: false
+        },
         solvedPuzzles: {
             wordlock: false,
             circuit: false,
